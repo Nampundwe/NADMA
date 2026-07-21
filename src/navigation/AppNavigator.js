@@ -1,12 +1,14 @@
 import React, { useState, useEffect, createContext } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUser } from '../data/storage';
+import { registerForPushNotifications } from '../utils/notifications';
 import { useTheme } from '../context/ThemeContext';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 export const AuthContext = createContext();
 
@@ -241,9 +243,7 @@ export default function AppNavigator() {
   }, []);
 
   useEffect(() => {
-    try {
-      import('../utils/notifications').then(m => m.registerForPushNotifications()).catch(() => {});
-    } catch (e) {}
+    registerForPushNotifications().catch(() => {});
   }, []);
 
   const checkUser = async () => {
@@ -269,7 +269,11 @@ export default function AppNavigator() {
   if (loading || onboarded === null) {
     return (
       <View style={[styles.loading, { backgroundColor: colors.bg }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <View style={[styles.loadingLogo, { backgroundColor: colors.primary }]}>
+          <Ionicons name="business" size={40} color="#fff" />
+        </View>
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading Nadma...</Text>
       </View>
     );
   }
@@ -283,7 +287,9 @@ export default function AppNavigator() {
       <NavigationContainer>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           {user ? (
-            <RootStack.Screen name="MainApp" component={MainTabs} />
+            <RootStack.Screen name="MainApp">
+              {() => <ErrorBoundary><MainTabs /></ErrorBoundary>}
+            </RootStack.Screen>
           ) : (
             <RootStack.Screen name="Login" component={AuthScreen} />
           )}
@@ -298,5 +304,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

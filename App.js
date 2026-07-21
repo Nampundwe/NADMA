@@ -2,12 +2,13 @@ import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 function AppContent() {
   const { isDark } = useTheme();
   return (
     <>
-      <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={isDark ? '#161B22' : '#1a237e'} />
+      <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={isDark ? '#111C44' : '#1B2559'} />
       <AppNavigator />
     </>
   );
@@ -15,8 +16,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AppContent />
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
