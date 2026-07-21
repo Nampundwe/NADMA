@@ -31,11 +31,11 @@ import {
   rejectBusiness,
   getAllReviews,
   deleteReview,
-  getAllBookings,
   updateBookingStatus,
   getAdminAnalytics,
   getAllReports,
   deleteReport,
+  onBookingsSnapshot,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
@@ -56,6 +56,10 @@ export default function AdminScreen({ navigation }) {
 
   useEffect(() => {
     loadData();
+    const unsubscribe = onBookingsSnapshot((bookings) => {
+      setBookings(bookings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    });
+    return () => unsubscribe();
   }, []);
 
   const animateList = () => {
@@ -66,13 +70,11 @@ export default function AdminScreen({ navigation }) {
     const u = await getAllUsers();
     const b = await getRegisteredBusinesses();
     const r = await getAllReviews();
-    const bk = await getAllBookings();
     const a = await getAdminAnalytics();
     const rp = await getAllReports();
     setUsers(u);
     setBusinesses(b);
     setReviews(r);
-    setBookings(bk.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
     setAnalytics(a);
     setReports(rp);
   };

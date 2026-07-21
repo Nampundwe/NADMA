@@ -2,7 +2,7 @@ import { auth, db } from '../config/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, writeBatch, serverTimestamp
+  query, where, orderBy, writeBatch, serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 
 const ADMIN_EMAILS = ['munangimuyambangorodwell@gmail.com', 'munangimuyambangorodwell'];
@@ -1251,5 +1251,133 @@ export const getRecommendedProviders = async (userId) => {
     return scored.sort((a, b) => b.matchScore - a.matchScore).slice(0, 5);
   } catch (error) {
     return [];
+  }
+};
+
+export const onBookingsSnapshot = (callback) => {
+  try {
+    const q = query(col(COLLECTIONS.bookings), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onUserBookingsSnapshot = (userId, callback) => {
+  try {
+    const q = query(col(COLLECTIONS.bookings), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onNotificationsSnapshot = (userId, callback) => {
+  try {
+    const q = query(col(COLLECTIONS.notifications), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onMessagesSnapshot = (userId, otherUserId, callback) => {
+  try {
+    const q = query(
+      col(COLLECTIONS.messages),
+      where('participants', 'array-contains', userId),
+      orderBy('createdAt', 'asc')
+    );
+    return onSnapshot(q, (snap) => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const filtered = otherUserId
+        ? all.filter(m => m.senderId === otherUserId || m.receiverId === otherUserId)
+        : all;
+      callback(filtered);
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onConversationsSnapshot = (userId, callback) => {
+  try {
+    const q = query(col(COLLECTIONS.messages), where('participants', 'array-contains', userId));
+    return onSnapshot(q, (snap) => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const convMap = {};
+      all.forEach(m => {
+        const otherId = m.senderId === userId ? m.receiverId : m.senderId;
+        if (!convMap[otherId] || new Date(m.createdAt) > new Date(convMap[otherId].createdAt)) {
+          convMap[otherId] = m;
+        }
+      });
+      callback(Object.entries(convMap).map(([uid, msg]) => ({ userId: uid, lastMessage: msg })));
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onPostsSnapshot = (callback) => {
+  try {
+    const q = query(col(COLLECTIONS.posts), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onProvidersSnapshot = (callback) => {
+  try {
+    return onSnapshot(col(COLLECTIONS.providers), (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onCategoriesSnapshot = (callback) => {
+  try {
+    return onSnapshot(col(COLLECTIONS.categories), (snap) => {
+      if (snap.empty) {
+        callback(defaultCategories);
+      } else {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
+    });
+  } catch (e) {
+    callback(defaultCategories);
+    return () => {};
+  }
+};
+
+export const onBusinessesSnapshot = (callback) => {
+  try {
+    return onSnapshot(col(COLLECTIONS.businesses), (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onReviewsSnapshot = (businessId, callback) => {
+  try {
+    const q = query(col(COLLECTIONS.reviews), where('businessId', '==', businessId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  } catch (e) {
+    return () => {};
   }
 };

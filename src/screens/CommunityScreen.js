@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -24,14 +24,13 @@ if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import {
-  getCommunityPosts,
   addCommunityPost,
   deleteCommunityPost,
   togglePostLike,
   addPostComment,
   getCurrentUser,
+  onPostsSnapshot,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../utils/haptics';
@@ -132,35 +131,23 @@ export default function CommunityScreen({ navigation }) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
   };
 
-  const loadData = useCallback(async () => {
-    try {
-      const [allPosts, currentUser] = await Promise.all([
-        getCommunityPosts(),
-        getCurrentUser(),
-      ]);
+  useEffect(() => {
+    const unsubscribe = onPostsSnapshot((allPosts) => {
       setPosts(
         allPosts.sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         )
       );
-      setUser(currentUser);
-    } catch (error) {
-      console.log('Error loading community data:', error);
-    } finally {
       setLoading(false);
-    }
+    });
+    getCurrentUser().then((currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      loadData();
-    }, [loadData])
-  );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
     setRefreshing(false);
   };
 
@@ -197,7 +184,6 @@ export default function CommunityScreen({ navigation }) {
       setNewDescription('');
       setNewCategory('General');
       setCreateModalVisible(false);
-      await loadData();
     } catch (error) {
       Alert.alert('Error', 'Failed to create post. Please try again.');
     } finally {
@@ -218,7 +204,6 @@ export default function CommunityScreen({ navigation }) {
             hapticWarning();
             animateList();
             await deleteCommunityPost(post.id);
-            await loadData();
           },
         },
       ]
@@ -232,7 +217,6 @@ export default function CommunityScreen({ navigation }) {
     }
     hapticLight();
     await togglePostLike(postId, user.id);
-    await loadData();
   };
 
   const handleAddComment = async () => {
@@ -254,10 +238,6 @@ export default function CommunityScreen({ navigation }) {
       await addPostComment(selectedPost.id, comment);
       hapticMedium();
       setNewComment('');
-      const updatedPosts = await getCommunityPosts();
-      const updated = updatedPosts.find((p) => p.id === selectedPost.id);
-      if (updated) setSelectedPost(updated);
-      await loadData();
     } catch (error) {
       Alert.alert('Error', 'Failed to add comment.');
     } finally {

@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategories } from '../data/services';
-import { getApprovedBusinesses, getCurrentUser, getAllServiceProviders, getAllBookings, updateBookingStatus, getRecommendedProviders } from '../data/firebaseStorage';
+import { getCurrentUser, updateBookingStatus, getRecommendedProviders, onProvidersSnapshot, onBookingsSnapshot, onBusinessesSnapshot } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium } from '../utils/haptics';
 import AnimatedCard from '../components/AnimatedCard';
@@ -36,8 +36,17 @@ export default function HomeScreen({ navigation }) {
   const [categories, setCategories] = useState([]);
 
   useEffect(() => {
+    const unsub1 = onProvidersSnapshot((providers) => {
+      setRegisteredBusinesses(providers);
+    });
+    const unsub2 = onBookingsSnapshot((bookings) => {
+      setPendingBookings(
+        bookings
+          .filter((b) => b.status === 'pending')
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      );
+    });
     (async () => {
-      await loadBusinesses();
       const u = await getCurrentUser();
       setUser(u);
       if (u) {
@@ -48,33 +57,11 @@ export default function HomeScreen({ navigation }) {
       setCategories(cats);
       setLoading(false);
     })();
+    return () => { unsub1(); unsub2(); };
   }, []);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      getApprovedBusinesses().then(setRegisteredBusinesses);
-      getCurrentUser().then(setUser);
-      getCategories().then(setCategories);
-      loadBusinesses();
-    });
-    return unsubscribe;
-  }, [navigation]);
-
-  const loadBusinesses = async () => {
-    const businesses = await getApprovedBusinesses();
-    const providers = await getAllServiceProviders();
-    setRegisteredBusinesses([...businesses, ...providers]);
-    const allBookings = await getAllBookings();
-    setPendingBookings(
-      allBookings
-        .filter((b) => b.status === 'pending')
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    );
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadBusinesses();
     const u = await getCurrentUser();
     setUser(u);
     setRefreshing(false);
@@ -111,7 +98,6 @@ export default function HomeScreen({ navigation }) {
         style: 'success',
         onPress: async () => {
           await updateBookingStatus(booking.id, 'approved');
-          loadBusinesses();
         },
       },
     ]);
@@ -125,7 +111,6 @@ export default function HomeScreen({ navigation }) {
         style: 'destructive',
         onPress: async () => {
           await updateBookingStatus(booking.id, 'rejected');
-          loadBusinesses();
         },
       },
     ]);

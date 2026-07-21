@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,12 @@ import {
 } from 'react-native';
 import AnimatedCard from '../components/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import {
-  getNotificationsByUser,
   markNotificationRead,
   markAllNotificationsRead,
   getCurrentUser,
+  onNotificationsSnapshot,
 } from '../data/firebaseStorage';
 import { hapticLight } from '../utils/haptics';
 
@@ -28,27 +27,22 @@ export default function NotificationsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadNotifications = async (u) => {
-    const currentUser = u || user;
-    if (currentUser) {
-      const data = await getNotificationsByUser(currentUser.id);
-      setNotifications(data);
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      getCurrentUser().then((u) => {
-        setUser(u);
-        if (u) getNotificationsByUser(u.id).then(setNotifications).finally(() => setLoading(false));
-        else setLoading(false);
-      });
-    }, [])
-  );
+  useEffect(() => {
+    getCurrentUser().then((u) => {
+      setUser(u);
+      if (u) {
+        const unsubscribe = onNotificationsSnapshot(u.id, (data) => {
+          setNotifications(data);
+          setLoading(false);
+        });
+        return () => unsubscribe();
+      }
+      setLoading(false);
+    });
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadNotifications();
     setRefreshing(false);
   };
 

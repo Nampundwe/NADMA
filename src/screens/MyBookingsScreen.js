@@ -21,7 +21,7 @@ if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { Ionicons } from '@expo/vector-icons';
-import { getBookingsByUser, cancelBooking, getCurrentUser, addReview, getReviews } from '../data/firebaseStorage';
+import { cancelBooking, getCurrentUser, addReview, getReviews, onUserBookingsSnapshot } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticWarning } from '../utils/haptics';
 
@@ -39,29 +39,29 @@ export default function MyBookingsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadBookings();
+    getCurrentUser().then((u) => {
+      if (u) {
+        setUser(u);
+        const unsubscribe = onUserBookingsSnapshot(u.id, (data) => {
+          setBookings(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          setLoading(false);
+        });
+        getReviews().then((allReviews) => {
+          const rated = allReviews.filter((r) => r.userId === u.id).map((r) => r.serviceId);
+          setRatedBookings(rated);
+        });
+        return () => unsubscribe();
+      }
+      setLoading(false);
+    });
   }, []);
 
   const animateList = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
   };
 
-  const loadBookings = async () => {
-    const user = await getCurrentUser();
-    if (user) {
-      setUser(user);
-      const data = await getBookingsByUser(user.id);
-      setBookings(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-      const allReviews = await getReviews();
-      const rated = allReviews.filter((r) => r.userId === user.id).map((r) => r.serviceId);
-      setRatedBookings(rated);
-    }
-    setLoading(false);
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadBookings();
     setRefreshing(false);
   };
 
@@ -74,7 +74,6 @@ export default function MyBookingsScreen({ navigation }) {
           onPress: async () => {
             await cancelBooking(booking.id);
             animateList();
-            loadBookings();
         },
       },
     ]);
@@ -105,7 +104,6 @@ export default function MyBookingsScreen({ navigation }) {
     await addReview(review);
     setShowRateModal(false);
     Alert.alert('Thanks!', 'Your review has been submitted.');
-    loadBookings();
   };
 
   const shareReceipt = (booking) => {

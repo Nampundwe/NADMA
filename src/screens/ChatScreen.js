@@ -14,12 +14,11 @@ import {
   Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import {
   sendMessage,
-  getConversation,
   markMessagesRead,
   getCurrentUser,
+  onMessagesSnapshot,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticMedium } from '../utils/haptics';
@@ -48,28 +47,18 @@ export default function ChatScreen({ route }) {
   useEffect(() => {
     getCurrentUser().then(async (u) => {
       setUser(u);
-      if (u) {
-        await loadMessages(u.id);
-        markMessagesRead(u.id, receiverId || businessId);
-      }
       setLoading(false);
     });
   }, []);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!user) return;
-      const interval = setInterval(() => {
-        if (user) loadMessages(user.id);
-      }, 3000);
-      return () => clearInterval(interval);
-    }, [user])
-  );
-
-  const loadMessages = async (userId) => {
-    const data = await getConversation(userId, receiverId || businessId);
-    setMessages(data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
-  };
+  useEffect(() => {
+    if (!user || !receiverId) return;
+    const unsubscribe = onMessagesSnapshot(user.id, receiverId, (msgs) => {
+      setMessages(msgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
+      markMessagesRead(user.id, receiverId);
+    });
+    return () => unsubscribe();
+  }, [user?.id, receiverId]);
 
   const handleSend = async () => {
     if (!inputText.trim() || !user) return;
@@ -95,7 +84,6 @@ export default function ChatScreen({ route }) {
 
     await sendMessage(message);
     setInputText('');
-    loadMessages(user.id);
   };
 
   const renderMessage = ({ item }) => {

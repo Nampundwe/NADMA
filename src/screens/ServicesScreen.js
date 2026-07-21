@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,15 +17,13 @@ import {
 } from 'react-native';
 import AnimatedCard from '../components/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  getAllServiceProviders,
-  getApprovedBusinesses,
   addServiceProvider,
   deleteServiceProvider,
   updateServiceProvider,
   getCurrentUser,
+  onProvidersSnapshot,
 } from '../data/firebaseStorage';
 import { getCategories } from '../data/services';
 import { useTheme } from '../context/ThemeContext';
@@ -472,24 +470,19 @@ export default function ServicesScreen({ route, navigation }) {
 
   const styles = getStyles(colors);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [categoryName])
-  );
-
-  const loadData = async () => {
-    const cats = await getCategories();
-    setCategories(cats);
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-
-    const businesses = await getApprovedBusinesses();
-    const categoryBusinesses = businesses.filter((b) => b.category === categoryName);
-    const sp = await getAllServiceProviders();
-    const categoryProviders = sp.filter((p) => p.category === categoryName);
-    setProviders([...categoryBusinesses, ...categoryProviders]);
-  };
+  useEffect(() => {
+    const unsubscribe = onProvidersSnapshot((allProviders) => {
+      const categoryProviders = allProviders.filter((p) => p.category === categoryName);
+      setProviders(categoryProviders);
+    });
+    (async () => {
+      const cats = await getCategories();
+      setCategories(cats);
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    })();
+    return () => unsubscribe();
+  }, [categoryName]);
 
   const filteredProviders = useMemo(() => {
     let filtered = [...providers];
@@ -546,7 +539,6 @@ export default function ServicesScreen({ route, navigation }) {
     await addServiceProvider(provider);
     setShowAddModal(false);
     resetAddForm();
-    loadData();
     Alert.alert('Added', `"${provider.name}" has been added to ${categoryName}`);
   };
 
@@ -558,7 +550,6 @@ export default function ServicesScreen({ route, navigation }) {
         style: 'destructive',
         onPress: async () => {
           await deleteServiceProvider(item.id);
-          loadData();
         },
       },
     ]);
@@ -576,7 +567,6 @@ export default function ServicesScreen({ route, navigation }) {
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
       await updateServiceProvider(item.id, { image: result.assets[0].uri });
-      loadData();
     }
   };
 
