@@ -26,7 +26,7 @@ import {
   deleteServiceProvider,
   updateServiceProvider,
   getCurrentUser,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { getCategories } from '../data/services';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticWarning } from '../utils/haptics';

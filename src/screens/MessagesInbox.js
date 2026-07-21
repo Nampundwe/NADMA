@@ -19,7 +19,7 @@ import {
   getConversationsForAdmin,
   getCurrentUser,
   getAllUsers,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 
 export default function MessagesInbox({ navigation }) {

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { createBooking, getCurrentUser } from '../data/storage';
+import { createBooking, getCurrentUser } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticError } from '../utils/haptics';
 

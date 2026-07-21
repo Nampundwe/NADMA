@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategories } from '../data/services';
-import { getApprovedBusinesses, getCurrentUser, getAllServiceProviders, getAllBookings, updateBookingStatus, getRecommendedProviders } from '../data/storage';
+import { getApprovedBusinesses, getCurrentUser, getAllServiceProviders, getAllBookings, updateBookingStatus, getRecommendedProviders } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium } from '../utils/haptics';
 import AnimatedCard from '../components/AnimatedCard';

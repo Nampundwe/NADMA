@@ -16,7 +16,7 @@ import {
   getBookingsByBusiness,
   getReviews,
   getProviderStats,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 
 const STATUS_COLORS = {

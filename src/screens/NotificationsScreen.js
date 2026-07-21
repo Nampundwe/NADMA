@@ -18,7 +18,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   getCurrentUser,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { hapticLight } from '../utils/haptics';
 
 export default function NotificationsScreen({ navigation }) {

@@ -16,7 +16,7 @@ import { getCategories } from '../data/services';
 import {
   saveRegisteredBusiness,
   getCurrentUser,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 
 export default function RegisterScreen({ navigation }) {

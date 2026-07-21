@@ -23,7 +23,7 @@ if (Platform.OS === 'android') {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import { getFavorites, removeFavorite } from '../data/storage';
+import { getFavorites, removeFavorite } from '../data/firebaseStorage';
 import { hapticLight, hapticWarning } from '../utils/haptics';
 
 export default function FavoritesScreen({ navigation }) {

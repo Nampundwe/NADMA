@@ -5,7 +5,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrentUser } from '../data/storage';
+import { getCurrentUser } from '../data/firebaseStorage';
+import { auth } from '../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { registerForPushNotifications } from '../utils/notifications';
 import { useTheme } from '../context/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -239,7 +241,20 @@ export default function AppNavigator() {
   const [onboarded, setOnboarded] = useState(null);
 
   useEffect(() => {
-    checkUser();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const currentUser = await getCurrentUser();
+          setUser(currentUser);
+        } catch (e) {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -251,17 +266,6 @@ export default function AppNavigator() {
   useEffect(() => {
     registerForPushNotifications().catch(() => {});
   }, []);
-
-  const checkUser = async () => {
-    try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-    } catch (e) {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogout = () => {
     setUser(null);

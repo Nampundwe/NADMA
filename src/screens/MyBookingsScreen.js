@@ -21,7 +21,7 @@ if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { Ionicons } from '@expo/vector-icons';
-import { getBookingsByUser, cancelBooking, getCurrentUser, addReview, getReviews } from '../data/storage';
+import { getBookingsByUser, cancelBooking, getCurrentUser, addReview, getReviews } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticWarning } from '../utils/haptics';
 

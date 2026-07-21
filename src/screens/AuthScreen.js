@@ -14,7 +14,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { signup, login, setCurrentUser } from '../data/storage';
+import { signup, login, setCurrentUser } from '../data/firebaseStorage';
 import { AuthContext } from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticError } from '../utils/haptics';
@@ -87,7 +87,7 @@ export default function AuthScreen({ navigation }) {
         const result = await signup(email.trim(), password, name.trim());
         if (result.success) {
           if (referralCode.trim()) {
-            const { applyReferralCode } = require('../data/storage');
+            const { applyReferralCode } = require('../data/firebaseStorage');
             await applyReferralCode(referralCode.trim(), result.user?.id || email.trim());
           }
           hapticSuccess();

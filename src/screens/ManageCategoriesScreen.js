@@ -26,7 +26,7 @@ import {
   addCategory,
   updateCategory,
   deleteCategory,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import AnimatedCard from '../components/AnimatedCard';
 import { hapticLight, hapticSuccess, hapticWarning, hapticError } from '../utils/haptics';

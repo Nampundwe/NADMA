@@ -36,7 +36,7 @@ import {
   getAdminAnalytics,
   getAllReports,
   deleteReport,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
 

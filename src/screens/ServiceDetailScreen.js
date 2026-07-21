@@ -29,7 +29,7 @@ import {
   updateServiceProvider,
   addReport,
   getProviderAvailability,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../utils/haptics';
 

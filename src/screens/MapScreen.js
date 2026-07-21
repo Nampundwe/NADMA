@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import { getApprovedBusinesses, getAllServiceProviders } from '../data/storage';
+import { getApprovedBusinesses, getAllServiceProviders } from '../data/firebaseStorage';
 import { getCategories } from '../data/services';
 
 export default function MapScreen({ navigation }) {

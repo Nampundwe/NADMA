@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { savePushToken } from '../data/storage';
+import { savePushToken } from '../data/firebaseStorage';
 
 let Notifications = null;
 

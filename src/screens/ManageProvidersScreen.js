@@ -29,7 +29,7 @@ import {
   addServiceProvider,
   updateServiceProvider,
   deleteServiceProvider,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 
 export default function ManageProvidersScreen({ navigation }) {

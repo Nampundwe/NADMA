@@ -20,7 +20,7 @@ import {
   getConversation,
   markMessagesRead,
   getCurrentUser,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticMedium } from '../utils/haptics';
 

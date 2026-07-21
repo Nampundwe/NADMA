@@ -16,7 +16,7 @@ import {
   getBookingsByBusiness,
   updateBookingStatus,
   getCurrentUser,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 
 export default function BookingsManagerScreen({ navigation }) {

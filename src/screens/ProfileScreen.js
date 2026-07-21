@@ -21,7 +21,7 @@ import {
   getRegisteredBusinesses,
   setCurrentUser,
   generateReferralCode,
-} from '../data/storage';
+} from '../data/firebaseStorage';
 import { AuthContext } from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
