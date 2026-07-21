@@ -26,6 +26,7 @@ export default function HomeScreen({ navigation }) {
   const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
+  const [searchMode, setSearchMode] = useState(false);
   const [registeredBusinesses, setRegisteredBusinesses] = useState([]);
   const [user, setUser] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -95,6 +96,7 @@ export default function HomeScreen({ navigation }) {
   const clearSearch = () => {
     setSearchQuery('');
     setSearchResults(null);
+    setSearchMode(false);
   };
 
   const handleApproveBooking = (booking) => {
@@ -870,7 +872,7 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  if (searchResults !== null) {
+  if (searchMode) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle={colors.statusBar} backgroundColor={colors.headerBg} />
@@ -948,7 +950,7 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity
             style={styles.searchBarHeader}
             activeOpacity={0.8}
-            onPress={() => handleSearch('')}
+            onPress={() => { setSearchMode(true); handleSearch(''); }}
             accessibilityLabel="Search services"
             accessibilityRole="button"
           >
