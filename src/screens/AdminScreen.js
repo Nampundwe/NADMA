@@ -13,6 +13,7 @@ import {
   LayoutAnimation,
   UIManager,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 
 if (Platform.OS === 'android') {
