@@ -27,7 +27,7 @@ import {
   updateServiceProvider,
   getCurrentUser,
 } from '../data/storage';
-import { categories } from '../data/services';
+import { getCategories } from '../data/services';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticWarning } from '../utils/haptics';
 
@@ -60,6 +60,7 @@ export default function ServicesScreen({ route, navigation }) {
   const [newHours, setNewHours] = useState('');
   const [newServicesText, setNewServicesText] = useState('');
   const [newImage, setNewImage] = useState(null);
+  const [categories, setCategories] = useState([]);
 
   const category = categories.find((c) => c.name === categoryName);
   const isAdmin = user?.role === 'admin';
@@ -478,6 +479,8 @@ export default function ServicesScreen({ route, navigation }) {
   );
 
   const loadData = async () => {
+    const cats = await getCategories();
+    setCategories(cats);
     const currentUser = await getCurrentUser();
     setUser(currentUser);
 

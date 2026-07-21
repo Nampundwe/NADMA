@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ if (Platform.OS === 'android') {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { categories } from '../data/services';
+import { getCategories } from '../data/services';
 import {
   getAllServiceProviders,
   addServiceProvider,
@@ -48,6 +48,7 @@ export default function ManageProvidersScreen({ navigation }) {
   const [servicesText, setServicesText] = useState('');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [newImage, setNewImage] = useState(null);
+  const [categories, setCategories] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -60,6 +61,8 @@ export default function ManageProvidersScreen({ navigation }) {
   };
 
   const loadProviders = async () => {
+    const cats = await getCategories();
+    setCategories(cats);
     const data = await getAllServiceProviders();
     setProviders(data.sort((a, b) => b.rating - a.rating));
   };

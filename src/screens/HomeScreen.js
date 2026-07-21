@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { categories } from '../data/services';
+import { getCategories } from '../data/services';
 import { getApprovedBusinesses, getCurrentUser, getAllServiceProviders, getAllBookings, updateBookingStatus, getRecommendedProviders } from '../data/storage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium } from '../utils/haptics';
@@ -33,6 +33,7 @@ export default function HomeScreen({ navigation }) {
   const [pendingBookings, setPendingBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [recommended, setRecommended] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -43,6 +44,8 @@ export default function HomeScreen({ navigation }) {
         const recs = await getRecommendedProviders(u.id);
         setRecommended(recs);
       }
+      const cats = await getCategories();
+      setCategories(cats);
       setLoading(false);
     })();
   }, []);
@@ -51,6 +54,7 @@ export default function HomeScreen({ navigation }) {
     const unsubscribe = navigation.addListener('focus', () => {
       getApprovedBusinesses().then(setRegisteredBusinesses);
       getCurrentUser().then(setUser);
+      getCategories().then(setCategories);
       loadBusinesses();
     });
     return unsubscribe;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { categories } from '../data/services';
+import { getCategories } from '../data/services';
 import {
   saveRegisteredBusiness,
   getCurrentUser,
@@ -30,6 +30,11 @@ export default function RegisterScreen({ navigation }) {
   const [hours, setHours] = useState('');
   const [services, setServices] = useState('');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    getCategories().then(setCategories);
+  }, []);
 
   const handleRegister = async () => {
     if (!name.trim()) {

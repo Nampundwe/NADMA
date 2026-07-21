@@ -583,6 +583,16 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('ManageCategories'); }} accessibilityLabel="Manage categories" accessibilityRole="button">
+              <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
+                <Ionicons name="grid" size={20} color="#4CAF50" />
+              </View>
+              <Text style={styles.menuItemText}>Manage Categories</Text>
+              <View style={styles.menuRight}>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </View>
+            </TouchableOpacity>
           </View>
         )}
 

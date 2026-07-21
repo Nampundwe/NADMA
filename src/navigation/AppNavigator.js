@@ -28,6 +28,7 @@ import MessagesInbox from '../screens/MessagesInbox';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import ManageProvidersScreen from '../screens/ManageProvidersScreen';
+import ManageCategoriesScreen from '../screens/ManageCategoriesScreen';
 import CommunityScreen from '../screens/CommunityScreen';
 import ProviderDashboardScreen from '../screens/ProviderDashboardScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
@@ -153,6 +154,11 @@ function ProfileStackScreen() {
         name="ManageProviders"
         component={ManageProvidersScreen}
         options={{ title: 'Manage Providers' }}
+      />
+      <ProfileStack.Screen
+        name="ManageCategories"
+        component={ManageCategoriesScreen}
+        options={{ title: 'Manage Categories' }}
       />
       <ProfileStack.Screen
         name="Settings"

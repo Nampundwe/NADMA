@@ -14,13 +14,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { getApprovedBusinesses, getAllServiceProviders } from '../data/storage';
-import { categories } from '../data/services';
+import { getCategories } from '../data/services';
 
 export default function MapScreen({ navigation }) {
   const { colors } = useTheme();
   const [providers, setProviders] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState([]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -29,6 +30,8 @@ export default function MapScreen({ navigation }) {
   );
 
   const loadProviders = async () => {
+    const cats = await getCategories();
+    setCategories(cats);
     const businesses = await getApprovedBusinesses();
     const sp = await getAllServiceProviders();
     setProviders([...businesses, ...sp]);
