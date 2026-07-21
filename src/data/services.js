@@ -2,7 +2,7 @@ export const categories = [
   {
     id: '1',
     name: 'Plumbing',
-    icon: 'water',
+    icon: 'water-outline',
     color: '#2196F3',
     image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600',
     tagline: 'Expert plumbers for all your water needs',
@@ -11,7 +11,7 @@ export const categories = [
   {
     id: '2',
     name: 'Electrical',
-    icon: 'flash',
+    icon: 'flash-outline',
     color: '#FF9800',
     image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=600',
     tagline: 'Safe and certified electrical work',
@@ -20,7 +20,7 @@ export const categories = [
   {
     id: '3',
     name: 'Carpentry',
-    icon: 'hammer',
+    icon: 'hammer-outline',
     color: '#795548',
     image: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600',
     tagline: 'Custom woodwork and furniture',
@@ -29,7 +29,7 @@ export const categories = [
   {
     id: '4',
     name: 'Painting',
-    icon: 'color-palette',
+    icon: 'brush-outline',
     color: '#9C27B0',
     image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=600',
     tagline: 'Transform your space with color',
@@ -47,7 +47,7 @@ export const categories = [
   {
     id: '6',
     name: 'Gardening',
-    icon: 'leaf',
+    icon: 'leaf-outline',
     color: '#8BC34A',
     image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600',
     tagline: 'Beautiful outdoor spaces',
