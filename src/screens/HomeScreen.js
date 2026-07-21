@@ -89,7 +89,7 @@ export default function HomeScreen({ navigation }) {
       );
       setSearchResults(results);
     } else {
-      setSearchResults(null);
+      setSearchResults(registeredBusinesses);
     }
   };
 
