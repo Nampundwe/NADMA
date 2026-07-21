@@ -32,7 +32,6 @@
       "@react-native-community/datetimepicker",
       "expo-notifications",
       "expo-image-picker",
-      "expo-haptics",
       "expo-splash-screen"
     ],
     "extra": {
