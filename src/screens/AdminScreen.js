@@ -67,16 +67,21 @@ export default function AdminScreen({ navigation }) {
   };
 
   const loadData = async () => {
-    const u = await getAllUsers();
-    const b = await getRegisteredBusinesses();
-    const r = await getAllReviews();
-    const a = await getAdminAnalytics();
-    const rp = await getAllReports();
-    setUsers(u);
-    setBusinesses(b);
-    setReviews(r);
-    setAnalytics(a);
-    setReports(rp);
+    try {
+      const u = await getAllUsers();
+      const b = await getRegisteredBusinesses();
+      const r = await getAllReviews();
+      const a = await getAdminAnalytics();
+      const rp = await getAllReports();
+      setUsers(u || []);
+      setBusinesses(b || []);
+      setReviews(r || []);
+      setAnalytics(a || {});
+      setReports(rp || []);
+    } catch (e) {
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onRefresh = async () => {
