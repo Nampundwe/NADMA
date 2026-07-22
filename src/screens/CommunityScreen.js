@@ -179,12 +179,16 @@ export default function CommunityScreen({ navigation }) {
         comments: [],
         createdAt: new Date().toISOString(),
       };
-      await addCommunityPost(post);
-      hapticSuccess();
-      setNewTitle('');
-      setNewDescription('');
-      setNewCategory('General');
-      setCreateModalVisible(false);
+      const result = await addCommunityPost(post);
+      if (result === true || result?.success !== false) {
+        hapticSuccess();
+        setNewTitle('');
+        setNewDescription('');
+        setNewCategory('General');
+        setCreateModalVisible(false);
+      } else {
+        Alert.alert('Error', result?.error || 'Failed to create post. Please try again.');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to create post. Please try again.');
     } finally {

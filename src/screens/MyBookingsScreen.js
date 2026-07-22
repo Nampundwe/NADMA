@@ -104,9 +104,13 @@ export default function MyBookingsScreen({ navigation }) {
       text: reviewText.trim() || 'Great service!',
       date: new Date().toISOString(),
     };
-    await addReview(review);
-    setShowRateModal(false);
-    Alert.alert('Thanks!', 'Your review has been submitted.');
+    const result = await addReview(review);
+    if (result === true || result?.success !== false) {
+      setShowRateModal(false);
+      Alert.alert('Thanks!', 'Your review has been submitted.');
+    } else {
+      Alert.alert('Error', result?.error || 'Failed to submit review.');
+    }
   };
 
   const shareReceipt = (booking) => {

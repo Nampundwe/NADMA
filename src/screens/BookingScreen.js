@@ -112,8 +112,8 @@ export default function BookingScreen({ route, navigation }) {
       createdAt: new Date().toISOString(),
     };
 
-    const success = await createBooking(booking);
-    if (success) {
+    const result = await createBooking(booking);
+    if (result === true || result?.success !== false) {
       hapticSuccess();
       Alert.alert(
         'Booking Submitted!',
@@ -121,7 +121,7 @@ export default function BookingScreen({ route, navigation }) {
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } else {
-      Alert.alert('Error', 'Failed to create booking. Please try again.');
+      Alert.alert('Error', result?.error || 'Failed to create booking. Please try again.');
     }
   };
 

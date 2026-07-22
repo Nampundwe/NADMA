@@ -78,6 +78,50 @@ const ensureUserDoc = async (uid, data) => {
   }
 };
 
+// ── Rate Limiting ──────────────────────────────────────────────
+const RATE_LIMITS = {
+  booking: { maxRequests: 5, windowMs: 60 * 60 * 1000 },
+  review:  { maxRequests: 3, windowMs: 60 * 60 * 1000 },
+  message: { maxRequests: 30, windowMs: 60 * 60 * 1000 },
+  post:    { maxRequests: 5, windowMs: 60 * 60 * 1000 },
+  report:  { maxRequests: 3, windowMs: 60 * 60 * 1000 },
+};
+
+const COLLECTION_TO_RATE_KEY = {
+  [COLLECTIONS.bookings]: 'booking',
+  [COLLECTIONS.reviews]: 'review',
+  [COLLECTIONS.messages]: 'message',
+  [COLLECTIONS.posts]: 'post',
+  [COLLECTIONS.reports]: 'report',
+};
+
+const checkRateLimit = async (userId, collectionName) => {
+  const action = COLLECTION_TO_RATE_KEY[collectionName];
+  const limit = RATE_LIMITS[action];
+  if (!limit) return { allowed: true };
+  try {
+    const snap = await getDocs(query(col(collectionName), where('userId', '==', userId)));
+    const count = snap.size;
+    if (count >= limit.maxRequests) {
+      const oldest = snap.docs.reduce((min, d) => {
+        const ts = d.data().createdAt?.seconds
+          ? d.data().createdAt.seconds * 1000
+          : new Date(d.data().createdAt || d.data().timestamp || 0).getTime();
+        return ts < min ? ts : min;
+      }, Infinity);
+      const retryMs = Math.max(0, oldest + limit.windowMs - Date.now());
+      return {
+        allowed: false,
+        retryAfterMin: Math.ceil(retryMs / 60000) || 1,
+        message: `Rate limit reached. Try again in ${Math.ceil(retryMs / 60000) || 1} minute(s).`,
+      };
+    }
+    return { allowed: true };
+  } catch (e) {
+    return { allowed: true };
+  }
+};
+
 export const getAllCategories = async () => {
   try {
     const snapshot = await getAllDocs(COLLECTIONS.categories);
@@ -523,6 +567,8 @@ export const toggleFavorite = async (service) => {
 
 export const addReview = async (review) => {
   try {
+    const rateCheck = await checkRateLimit(review.userId, COLLECTIONS.reviews);
+    if (!rateCheck.allowed) return { success: false, error: rateCheck.message };
     const id = review.id || 'rev_' + Date.now();
     await set(COLLECTIONS.reviews, id, { ...review, id });
     return true;
@@ -562,6 +608,8 @@ export const deleteReview = async (reviewId) => {
 
 export const createBooking = async (booking) => {
   try {
+    const rateCheck = await checkRateLimit(booking.userId, COLLECTIONS.bookings);
+    if (!rateCheck.allowed) return { success: false, error: rateCheck.message };
     const id = booking.id || 'book_' + Date.now();
     await set(COLLECTIONS.bookings, id, { ...booking, id });
     const adminIds = await getAdminUserIds();
@@ -657,6 +705,8 @@ export const rateBooking = async (bookingId, rating, review) => {
 
 export const sendMessage = async (message) => {
   try {
+    const rateCheck = await checkRateLimit(message.senderId, COLLECTIONS.messages);
+    if (!rateCheck.allowed) return { success: false, error: rateCheck.message };
     const id = message.id || 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
     await set(COLLECTIONS.messages, id, { ...message, id });
     return true;
@@ -824,6 +874,8 @@ export const getUnreadCount = getUnreadNotificationCount;
 
 export const addReport = async (report) => {
   try {
+    const rateCheck = await checkRateLimit(report.userId, COLLECTIONS.reports);
+    if (!rateCheck.allowed) return { success: false, error: rateCheck.message };
     const id = report.id || 'rpt_' + Date.now();
     await set(COLLECTIONS.reports, id, { ...report, id });
     const adminIds = await getAdminUserIds();
@@ -904,6 +956,8 @@ export const applyReferralCode = async (code, newUserId) => {
 
 export const addCommunityPost = async (post) => {
   try {
+    const rateCheck = await checkRateLimit(post.userId, COLLECTIONS.posts);
+    if (!rateCheck.allowed) return { success: false, error: rateCheck.message };
     const id = post.id || 'post_' + Date.now();
     await set(COLLECTIONS.posts, id, { ...post, id });
     return true;

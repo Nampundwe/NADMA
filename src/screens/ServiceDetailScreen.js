@@ -116,13 +116,17 @@ export default function ServiceDetailScreen({ route, navigation }) {
       text: reviewText.trim(),
       date: new Date().toISOString(),
     };
-    await addReview(review);
-    const updatedReviews = await getReviews(service.id);
-    setReviews(updatedReviews);
-    hapticSuccess();
-    setShowReviewModal(false);
-    setReviewText('');
-    setReviewRating(5);
+    const result = await addReview(review);
+    if (result === true || result?.success !== false) {
+      const updatedReviews = await getReviews(service.id);
+      setReviews(updatedReviews);
+      hapticSuccess();
+      setShowReviewModal(false);
+      setReviewText('');
+      setReviewRating(5);
+    } else {
+      Alert.alert('Error', result?.error || 'Failed to submit review.');
+    }
   };
 
   const handleDeleteReview = (reviewId) => {
@@ -187,12 +191,16 @@ export default function ServiceDetailScreen({ route, navigation }) {
       reason: reportReason.trim(),
       timestamp: new Date().toISOString(),
     };
-    await addReport(report);
-    hapticWarning();
-    setShowReportModal(false);
-    setReportReason('');
-    setReportCategory('Other');
-    Alert.alert('Reported', 'Thank you for your report. Admin will review it.');
+    const result = await addReport(report);
+    if (result === true || result?.success !== false) {
+      hapticWarning();
+      setShowReportModal(false);
+      setReportReason('');
+      setReportCategory('Other');
+      Alert.alert('Reported', 'Thank you for your report. Admin will review it.');
+    } else {
+      Alert.alert('Error', result?.error || 'Failed to submit report.');
+    }
   };
 
   const renderReview = ({ item }) => (

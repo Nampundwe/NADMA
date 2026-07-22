@@ -83,8 +83,12 @@ export default function ChatScreen({ route }) {
       read: false,
     };
 
-    await sendMessage(message);
-    setInputText('');
+    const result = await sendMessage(message);
+    if (result === true || result?.success !== false) {
+      setInputText('');
+    } else {
+      Alert.alert('Error', result?.error || 'Failed to send message.');
+    }
   };
 
   const renderMessage = ({ item }) => {
