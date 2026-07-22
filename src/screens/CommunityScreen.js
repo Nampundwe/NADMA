@@ -37,6 +37,8 @@ import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../util
 import { createStyleSheet } from '../utils/responsive';
 
 const POST_CATEGORIES = [
+  'All',
+  'News',
   'General',
   'Plumbing',
   'Electrical',
@@ -49,6 +51,8 @@ const POST_CATEGORIES = [
 ];
 
 const CATEGORY_COLORS = {
+  All: '#6B7280',
+  News: '#D32F2F',
   General: '#6B7280',
   Plumbing: '#2196F3',
   Electrical: '#FF9800',
@@ -121,6 +125,7 @@ export default function CommunityScreen({ navigation }) {
   const [posting, setPosting] = useState(false);
   const [commenting, setCommenting] = useState(false);
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  const [filterCategory, setFilterCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
   const emptyOpacity = useRef(new Animated.Value(0)).current;
 
@@ -163,6 +168,10 @@ export default function CommunityScreen({ navigation }) {
     }
     if (!user) {
       Alert.alert('Not Logged In', 'Please log in to create a post.');
+      return;
+    }
+    if (newCategory === 'News' && user.role !== 'admin') {
+      Alert.alert('Not Allowed', 'Only admins can post News.');
       return;
     }
 
@@ -255,6 +264,19 @@ export default function CommunityScreen({ navigation }) {
     setCommentsModalVisible(true);
   };
 
+  const filteredPosts = posts.filter((p) => {
+    if (filterCategory === 'All') return true;
+    return p.category === filterCategory;
+  });
+
+  const pinnedPosts = filterCategory === 'All'
+    ? filteredPosts.filter((p) => p.category === 'News')
+    : [];
+  const regularPosts = filteredPosts.filter((p) => !pinnedPosts.includes(p));
+  const displayPosts = [...pinnedPosts, ...regularPosts];
+
+  const TAB_CATEGORIES = POST_CATEGORIES;
+
   const renderPost = ({ item }) => {
     const isLiked = user && item.likes && item.likes.includes(user.id);
     const likeCount = item.likes ? item.likes.length : 0;
@@ -264,7 +286,7 @@ export default function CommunityScreen({ navigation }) {
     const categoryColor = CATEGORY_COLORS[item.category] || '#6B7280';
 
     return (
-      <View style={styles.postCard}>
+      <View style={[styles.postCard, item.category === 'News' && styles.newsPostCard]}>
         <View style={styles.postHeader}>
           <View style={styles.postHeaderLeft}>
             <View
@@ -278,7 +300,15 @@ export default function CommunityScreen({ navigation }) {
               </Text>
             </View>
             <View style={styles.postUserInfo}>
-              <Text style={styles.postUserName}>{item.userName}</Text>
+              <View style={styles.postUserNameRow}>
+                <Text style={styles.postUserName}>{item.userName}</Text>
+                {item.category === 'News' && (
+                  <View style={styles.adminBadge}>
+                    <Ionicons name="megaphone" size={10} color="#fff" />
+                    <Text style={styles.adminBadgeText}>NEWS</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.postTime}>{getTimeAgo(item.createdAt)}</Text>
             </View>
           </View>
@@ -403,13 +433,36 @@ export default function CommunityScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Filter Tabs */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterTabs}
+        contentContainerStyle={styles.filterTabsContent}
+      >
+        {TAB_CATEGORIES.map((cat) => {
+          const isActive = filterCategory === cat;
+          const color = CATEGORY_COLORS[cat] || '#6B7280';
+          return (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.filterTab, isActive && { backgroundColor: color }]}
+              onPress={() => { hapticLight(); setFilterCategory(cat); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterTabText, isActive && { color: '#fff' }]}>{cat}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
       <FlatList
-        data={posts}
+        data={displayPosts}
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.postsList,
-          posts.length === 0 && styles.postsListEmpty,
+          displayPosts.length === 0 && styles.postsListEmpty,
         ]}
         ListEmptyComponent={renderEmpty}
         showsVerticalScrollIndicator={false}
@@ -517,7 +570,7 @@ export default function CommunityScreen({ navigation }) {
         >
           <View style={styles.pickerContainer}>
             <Text style={styles.pickerTitle}>Select Category</Text>
-            {POST_CATEGORIES.map((cat) => (
+            {POST_CATEGORIES.filter(cat => cat !== 'All' && (cat !== 'News' || user?.role === 'admin')).map((cat) => (
               <TouchableOpacity
                 key={cat}
                 style={[
@@ -719,6 +772,54 @@ const getStyles = (colors) => createStyleSheet({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  filterTabs: {
+    maxHeight: 50,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  filterTabsContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  filterTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: colors.borderLight,
+  },
+  filterTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+
+  newsPostCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#D32F2F',
+  },
+  postUserNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D32F2F',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 3,
+  },
+  adminBadgeText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#fff',
+    letterSpacing: 0.5,
   },
 
   loadingContainer: {
