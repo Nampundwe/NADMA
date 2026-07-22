@@ -1267,9 +1267,13 @@ export const onBookingsSnapshot = (callback) => {
 
 export const onUserBookingsSnapshot = (userId, callback) => {
   try {
-    const q = query(col(COLLECTIONS.bookings), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    const q = query(col(COLLECTIONS.bookings), where('userId', '==', userId));
     return onSnapshot(q, (snap) => {
-      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+        const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+        const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        return tb - ta;
+      }));
     });
   } catch (e) {
     return () => {};
@@ -1278,9 +1282,13 @@ export const onUserBookingsSnapshot = (userId, callback) => {
 
 export const onNotificationsSnapshot = (userId, callback) => {
   try {
-    const q = query(col(COLLECTIONS.notifications), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    const q = query(col(COLLECTIONS.notifications), where('userId', '==', userId));
     return onSnapshot(q, (snap) => {
-      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+        const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+        const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        return tb - ta;
+      }));
     });
   } catch (e) {
     return () => {};
@@ -1291,11 +1299,14 @@ export const onMessagesSnapshot = (userId, otherUserId, callback) => {
   try {
     const q = query(
       col(COLLECTIONS.messages),
-      where('participants', 'array-contains', userId),
-      orderBy('createdAt', 'asc')
+      where('participants', 'array-contains', userId)
     );
     return onSnapshot(q, (snap) => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+        const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+        const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        return ta - tb;
+      });
       const filtered = otherUserId
         ? all.filter(m => m.senderId === otherUserId || m.receiverId === otherUserId)
         : all;
@@ -1373,9 +1384,13 @@ export const onBusinessesSnapshot = (callback) => {
 
 export const onReviewsSnapshot = (businessId, callback) => {
   try {
-    const q = query(col(COLLECTIONS.reviews), where('businessId', '==', businessId), orderBy('createdAt', 'desc'));
+    const q = query(col(COLLECTIONS.reviews), where('businessId', '==', businessId));
     return onSnapshot(q, (snap) => {
-      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+        const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+        const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        return tb - ta;
+      }));
     });
   } catch (e) {
     return () => {};
