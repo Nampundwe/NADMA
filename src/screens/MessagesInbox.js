@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -21,6 +21,7 @@ import {
   getAllUsers,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function MessagesInbox({ navigation }) {
   const { colors } = useTheme();
@@ -248,7 +249,7 @@ export default function MessagesInbox({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

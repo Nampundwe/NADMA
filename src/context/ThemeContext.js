@@ -1,5 +1,24 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useMemo } from 'react';
+import { useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  scale,
+  verticalScale,
+  moderateScale,
+  normalizeFont,
+  wp,
+  hp,
+  isTablet as baseIsTablet,
+  isSmallScreen as baseIsSmall,
+  fontSize,
+  spacing,
+  rPadding,
+  rBorderRadius,
+  avatarSize,
+  iconSize,
+  cardHeight,
+  getGridColumns,
+} from '../utils/responsive';
 
 const SETTINGS_KEY = '@nadma_settings';
 
@@ -57,10 +76,34 @@ const ThemeContext = createContext({
 
 export function ThemeProvider({ children }) {
   const [isDark, setIsDark] = useState(false);
+  const { width, height } = useWindowDimensions();
+  const isTablet = width >= 768;
+  const isSmall = width < 360;
+  const cols = getGridColumns(2, 2, 3, isTablet ? 4 : 3);
 
   useEffect(() => {
     loadTheme();
   }, []);
+
+  const responsive = useMemo(() => ({
+    width,
+    height,
+    isTablet,
+    isSmall,
+    scale: (size) => (width / 390) * size,
+    verticalScale: (size) => (height / 844) * size,
+    moderateScale: (size, factor = 0.5) => size + ((width / 390) * size - size) * factor,
+    wp: (pct) => (width * pct) / 100,
+    hp: (pct) => (height * pct) / 100,
+    cols,
+    fontSize,
+    spacing,
+    rPadding,
+    rBorderRadius,
+    avatarSize,
+    iconSize,
+    cardHeight,
+  }), [width, height, isTablet, isSmall, cols]);
 
   const loadTheme = async () => {
     try {
@@ -84,7 +127,7 @@ export function ThemeProvider({ children }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ colors: isDark ? darkColors : lightColors, isDark, toggleTheme }}>
+    <ThemeContext.Provider value={{ colors: isDark ? darkColors : lightColors, isDark, toggleTheme, responsive }}>
       {children}
     </ThemeContext.Provider>
   );

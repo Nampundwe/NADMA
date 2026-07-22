@@ -28,6 +28,7 @@ import {
 import { getCategories } from '../data/services';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticWarning } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 const DEFAULT_IMAGES = {
   Plumbing: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=400',
@@ -63,7 +64,7 @@ export default function ServicesScreen({ route, navigation }) {
   const category = categories.find((c) => c.name === categoryName);
   const isAdmin = user?.role === 'admin';
 
-  const getStyles = (colors) => StyleSheet.create({
+  const getStyles = (colors) => createStyleSheet({
     container: {
       flex: 1,
       backgroundColor: colors.bg,

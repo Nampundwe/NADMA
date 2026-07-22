@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
@@ -23,6 +23,7 @@ import {
 import { AuthContext } from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -493,7 +494,7 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
-const getStyles = (c) => StyleSheet.create({
+const getStyles = (c) => createStyleSheet({
   container: { flex: 1, backgroundColor: c.bg },
   header: {
     backgroundColor: c.headerBg,

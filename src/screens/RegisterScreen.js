@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -18,6 +18,7 @@ import {
   getCurrentUser,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function RegisterScreen({ navigation }) {
   const { colors } = useTheme();
@@ -243,7 +244,7 @@ export default function RegisterScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

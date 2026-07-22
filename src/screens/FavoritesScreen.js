@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -25,6 +25,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { getFavorites, removeFavorite } from '../data/firebaseStorage';
 import { hapticLight, hapticWarning } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function FavoritesScreen({ navigation }) {
   const { colors } = useTheme();
@@ -144,7 +145,7 @@ export default function FavoritesScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

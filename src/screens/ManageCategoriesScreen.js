@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -30,6 +30,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import AnimatedCard from '../components/AnimatedCard';
 import { hapticLight, hapticSuccess, hapticWarning, hapticError } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 const ICON_OPTIONS = [
   'water-outline', 'flash-outline', 'hammer-outline', 'brush-outline',
@@ -359,7 +360,7 @@ export default function ManageCategoriesScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     backgroundColor: colors.headerBg,

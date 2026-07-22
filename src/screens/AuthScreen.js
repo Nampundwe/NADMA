@@ -18,6 +18,7 @@ import { signup, login, setCurrentUser } from '../data/firebaseStorage';
 import { AuthContext } from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticError } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -120,7 +121,7 @@ export default function AuthScreen({ navigation }) {
     );
   };
 
-  const getStyles = (colors) => StyleSheet.create({
+  const getStyles = (colors) => createStyleSheet({
     container: {
       flex: 1,
       backgroundColor: colors.headerBg,

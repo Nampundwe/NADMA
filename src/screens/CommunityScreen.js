@@ -34,6 +34,7 @@ import {
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 const POST_CATEGORIES = [
   'General',
@@ -686,7 +687,7 @@ export default function CommunityScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -19,6 +19,7 @@ import {
   onNotificationsSnapshot,
 } from '../data/firebaseStorage';
 import { hapticLight } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function NotificationsScreen({ navigation }) {
   const { colors } = useTheme();
@@ -160,7 +161,7 @@ export default function NotificationsScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

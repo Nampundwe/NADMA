@@ -16,6 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { createBooking, getCurrentUser } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticError } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function BookingScreen({ route, navigation }) {
   const { colors } = useTheme();
@@ -299,7 +300,7 @@ export default function BookingScreen({ route, navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

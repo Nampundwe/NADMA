@@ -21,6 +21,7 @@ import { getCurrentUser, updateBookingStatus, getRecommendedProviders, onProvide
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium } from '../utils/haptics';
 import AnimatedCard from '../components/AnimatedCard';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function HomeScreen({ navigation }) {
   const { colors } = useTheme();
@@ -120,7 +121,7 @@ export default function HomeScreen({ navigation }) {
     return registeredBusinesses.filter((b) => b.category === categoryName).length;
   };
 
-  const getStyles = (colors) => StyleSheet.create({
+  const getStyles = (colors) => createStyleSheet({
     container: {
       flex: 1,
       backgroundColor: colors.bg,

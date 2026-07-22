@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -31,6 +31,7 @@ import {
   deleteServiceProvider,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function ManageProvidersScreen({ navigation }) {
   const { colors } = useTheme();
@@ -458,7 +459,7 @@ export default function ManageProvidersScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     backgroundColor: colors.headerBg,

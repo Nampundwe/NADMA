@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { cancelBooking, getCurrentUser, addReview, getReviews, onUserBookingsSnapshot } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticWarning } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function MyBookingsScreen({ navigation }) {
   const { colors } = useTheme();
@@ -298,7 +299,7 @@ export default function MyBookingsScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

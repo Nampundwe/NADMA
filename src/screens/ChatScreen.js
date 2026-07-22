@@ -22,6 +22,7 @@ import {
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticMedium } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function ChatScreen({ route }) {
   const { colors } = useTheme();
@@ -231,7 +232,7 @@ export default function ChatScreen({ route }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

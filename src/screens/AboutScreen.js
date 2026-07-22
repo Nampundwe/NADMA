@@ -2,7 +2,7 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   ScrollView,
   SafeAreaView,
   Linking,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function AboutScreen() {
   const { colors } = useTheme();
@@ -140,7 +141,7 @@ export default function AboutScreen() {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

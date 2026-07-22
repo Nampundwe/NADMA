@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
@@ -18,6 +18,7 @@ import {
   getProviderStats,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { createStyleSheet } from '../utils/responsive';
 
 const STATUS_COLORS = {
   pending: '#F59E0B',
@@ -244,7 +245,7 @@ export default function ProviderDashboardScreen({ route, navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

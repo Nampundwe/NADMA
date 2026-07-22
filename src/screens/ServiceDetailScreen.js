@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   ScrollView,
   Image,
   TouchableOpacity,
@@ -32,6 +32,7 @@ import {
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function ServiceDetailScreen({ route, navigation }) {
   const { colors } = useTheme();
@@ -660,7 +661,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

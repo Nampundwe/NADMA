@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { getApprovedBusinesses, getAllServiceProviders } from '../data/firebaseStorage';
 import { getCategories } from '../data/services';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function MapScreen({ navigation }) {
   const { colors } = useTheme();
@@ -139,7 +140,7 @@ export default function MapScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     backgroundColor: colors.headerBg,

@@ -39,6 +39,7 @@ import {
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
+import { createStyleSheet } from '../utils/responsive';
 
 export default function AdminScreen({ navigation }) {
   const { colors } = useTheme();
@@ -746,7 +747,7 @@ export default function AdminScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
+const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
