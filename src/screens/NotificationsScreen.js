@@ -29,17 +29,19 @@ export default function NotificationsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    let unsubscribe;
     getCurrentUser().then((u) => {
       setUser(u);
       if (u) {
-        const unsubscribe = onNotificationsSnapshot(u.id, (data) => {
+        unsubscribe = onNotificationsSnapshot(u.id, (data) => {
           setNotifications(data);
           setLoading(false);
         });
-        return () => unsubscribe();
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
+    return () => { if (unsubscribe) unsubscribe(); };
   }, []);
 
   const onRefresh = async () => {

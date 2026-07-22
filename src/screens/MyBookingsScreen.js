@@ -40,21 +40,23 @@ export default function MyBookingsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubscribe;
     getCurrentUser().then((u) => {
       if (u) {
         setUser(u);
-        const unsubscribe = onUserBookingsSnapshot(u.id, (data) => {
-          setBookings(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+        unsubscribe = onUserBookingsSnapshot(u.id, (data) => {
+          setBookings(data);
           setLoading(false);
         });
         getReviews().then((allReviews) => {
           const rated = allReviews.filter((r) => r.userId === u.id).map((r) => r.serviceId);
           setRatedBookings(rated);
         });
-        return () => unsubscribe();
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
+    return () => { if (unsubscribe) unsubscribe(); };
   }, []);
 
   const animateList = () => {
