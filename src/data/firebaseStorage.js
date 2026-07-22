@@ -27,6 +27,16 @@ const defaultCategories = [
 ];
 
 const CATEGORIES_KEY = 'categories';
+
+const getAdminUserIds = async () => {
+  try {
+    const snapshot = await getDocs(query(col(COLLECTIONS.users), where('role', '==', 'admin')));
+    return snapshot.docs.map(d => d.id);
+  } catch (e) {
+    return [];
+  }
+};
+
 const COLLECTIONS = {
   users: 'users',
   businesses: 'businesses',
@@ -554,16 +564,19 @@ export const createBooking = async (booking) => {
   try {
     const id = booking.id || 'book_' + Date.now();
     await set(COLLECTIONS.bookings, id, { ...booking, id });
-    await addNotification({
-      id: 'notif_' + Date.now(),
-      userId: 'admin',
-      type: 'new_booking',
-      title: 'New Booking',
-      message: `${booking.userName} booked ${booking.businessName} for ${booking.date} at ${booking.time}`,
-      bookingId: id,
-      timestamp: new Date().toISOString(),
-      read: false,
-    });
+    const adminIds = await getAdminUserIds();
+    for (const adminId of adminIds) {
+      await addNotification({
+        id: 'notif_' + Date.now() + '_' + adminId.slice(0, 4),
+        userId: adminId,
+        type: 'new_booking',
+        title: 'New Booking',
+        message: `${booking.userName} booked ${booking.businessName} for ${booking.date} at ${booking.time}`,
+        bookingId: id,
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+    }
     return true;
   } catch (error) {
     return false;
@@ -813,15 +826,18 @@ export const addReport = async (report) => {
   try {
     const id = report.id || 'rpt_' + Date.now();
     await set(COLLECTIONS.reports, id, { ...report, id });
-    await addNotification({
-      id: 'notif_' + Date.now(),
-      userId: 'admin',
-      type: 'new_report',
-      title: 'Provider Reported',
-      message: `${report.reporterName} reported "${report.providerName}" for: ${report.reason}`,
-      timestamp: new Date().toISOString(),
-      read: false,
-    });
+    const adminIds = await getAdminUserIds();
+    for (const adminId of adminIds) {
+      await addNotification({
+        id: 'notif_' + Date.now() + '_' + adminId.slice(0, 4),
+        userId: adminId,
+        type: 'new_report',
+        title: 'Provider Reported',
+        message: `${report.reporterName} reported "${report.providerName}" for: ${report.reason}`,
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+    }
     return true;
   } catch (error) {
     return false;
@@ -1285,8 +1301,8 @@ export const onNotificationsSnapshot = (userId, callback) => {
     const q = query(col(COLLECTIONS.notifications), where('userId', '==', userId));
     return onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
-        const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
-        const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        const ta = a.timestamp ? new Date(a.timestamp).getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const tb = b.timestamp ? new Date(b.timestamp).getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
         return tb - ta;
       }));
     });
