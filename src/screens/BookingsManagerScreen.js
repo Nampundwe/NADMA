@@ -36,7 +36,12 @@ export default function BookingsManagerScreen({ navigation }) {
     const user = await getCurrentUser();
     if (user) {
       const all = await getRegisteredBusinesses();
-      const mine = all.filter((b) => b.ownerId === user.id);
+      let mine;
+      if (user.role === 'admin') {
+        mine = all;
+      } else {
+        mine = all.filter((b) => b.ownerId === user.id);
+      }
       setBusinesses(mine);
       if (mine.length === 1) {
         setSelectedBusiness(mine[0]);
@@ -91,7 +96,7 @@ export default function BookingsManagerScreen({ navigation }) {
   const filteredBookings =
     filter === 'all' ? bookings : bookings.filter((b) => b.status === filter);
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   const renderBooking = ({ item }) => (
     <View style={styles.card}>

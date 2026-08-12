@@ -29,12 +29,16 @@ import {
   addServiceProvider,
   updateServiceProvider,
   deleteServiceProvider,
+  uploadImage,
+  getCurrentUser,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { createStyleSheet } from '../utils/responsive';
 
 export default function ManageProvidersScreen({ navigation }) {
   const { colors } = useTheme();
+  const toast = useToast();
   const [providers, setProviders] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState(null);
@@ -97,7 +101,7 @@ export default function ManageProvidersScreen({ navigation }) {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Please grant camera roll access to add photos.');
+      toast.error('Camera roll access needed');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -111,19 +115,19 @@ export default function ManageProvidersScreen({ navigation }) {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Name is required');
+      toast.error('Name is required');
       return;
     }
     if (!category) {
-      Alert.alert('Error', 'Select a category');
+      toast.error('Select a category');
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Error', 'Description is required');
+      toast.error('Description is required');
       return;
     }
     if (!phone.trim()) {
-      Alert.alert('Error', 'Phone is required');
+      toast.error('Phone is required');
       return;
     }
 
@@ -131,6 +135,12 @@ export default function ManageProvidersScreen({ navigation }) {
       .split(',')
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+
+    let imageUrl = newImage;
+    if (newImage && newImage.startsWith('file://')) {
+      const id = editingProvider ? editingProvider.id : 'sp_' + Date.now();
+      imageUrl = await uploadImage(`provider-images/${id}.jpg`, newImage) || newImage;
+    }
 
     if (editingProvider) {
       await updateServiceProvider(editingProvider.id, {
@@ -141,11 +151,12 @@ export default function ManageProvidersScreen({ navigation }) {
         address: address.trim(),
         hours: hours.trim(),
         services: servicesList,
-        image: newImage || editingProvider.image,
+        image: imageUrl || editingProvider.image,
       });
-      Alert.alert('Updated', 'Provider updated');
+      toast.success('Provider updated');
     } else {
       const catObj = categories.find((c) => c.name === category);
+      const user = await getCurrentUser();
       const provider = {
         id: 'sp_' + Date.now(),
         name: name.trim(),
@@ -157,12 +168,13 @@ export default function ManageProvidersScreen({ navigation }) {
         services: servicesList.length > 0 ? servicesList : ['General Service'],
         rating: 0,
         reviews: 0,
-        image: newImage || 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=400',
+        image: imageUrl || 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=400',
         isUserRegistered: false,
+        ownerId: user?.id || null,
         createdAt: new Date().toISOString(),
       };
       await addServiceProvider(provider);
-      Alert.alert('Added', 'Provider added');
+      toast.success('Provider added');
     }
 
     setShowModal(false);
@@ -277,6 +289,7 @@ export default function ManageProvidersScreen({ navigation }) {
           placeholderTextColor={colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          maxLength={100}
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -329,6 +342,7 @@ export default function ManageProvidersScreen({ navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={name}
                   onChangeText={setName}
+                  maxLength={50}
                 />
               </View>
 
@@ -375,6 +389,7 @@ export default function ManageProvidersScreen({ navigation }) {
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
+                  maxLength={500}
                 />
               </View>
 
@@ -407,6 +422,7 @@ export default function ManageProvidersScreen({ navigation }) {
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
+                  maxLength={15}
                 />
               </View>
 
@@ -418,6 +434,7 @@ export default function ManageProvidersScreen({ navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={address}
                   onChangeText={setAddress}
+                  maxLength={100}
                 />
               </View>
 
@@ -429,6 +446,7 @@ export default function ManageProvidersScreen({ navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={hours}
                   onChangeText={setHours}
+                  maxLength={50}
                 />
               </View>
 
@@ -440,6 +458,7 @@ export default function ManageProvidersScreen({ navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={servicesText}
                   onChangeText={setServicesText}
+                  maxLength={200}
                 />
               </View>
 

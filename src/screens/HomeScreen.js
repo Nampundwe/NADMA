@@ -12,15 +12,16 @@ import {
   RefreshControl,
   Alert,
   StatusBar,
-  Linking,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategories } from '../data/services';
-import { getCurrentUser, updateBookingStatus, getRecommendedProviders, onProvidersSnapshot, onBookingsSnapshot, onBusinessesSnapshot } from '../data/firebaseStorage';
+import { getCurrentUser, updateBookingStatus, getRecommendedProviders, onProvidersSnapshot, onBookingsSnapshot, onBusinessesSnapshot, onNotificationsSnapshot } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
-import { hapticLight, hapticMedium } from '../utils/haptics';
+import { useToast } from '../context/ToastContext';
+import { hapticLight } from '../utils/haptics';
 import AnimatedCard from '../components/AnimatedCard';
+import { HomeSkeleton } from '../components/Skeleton';
 import { createStyleSheet } from '../utils/responsive';
 
 export default function HomeScreen({ navigation }) {
@@ -35,6 +36,8 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [recommended, setRecommended] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     const unsub1 = onProvidersSnapshot((providers) => {
@@ -47,18 +50,22 @@ export default function HomeScreen({ navigation }) {
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       );
     });
+    let unsub3 = null;
     (async () => {
       const u = await getCurrentUser();
       setUser(u);
       if (u) {
         const recs = await getRecommendedProviders(u.id);
         setRecommended(recs);
+        unsub3 = onNotificationsSnapshot(u.id, (notifs) => {
+          setUnreadNotifCount(notifs.filter((n) => !n.read).length);
+        });
       }
       const cats = await getCategories();
       setCategories(cats);
       setLoading(false);
     })();
-    return () => { unsub1(); unsub2(); };
+    return () => { unsub1(); unsub2(); if (unsub3) unsub3(); };
   }, []);
 
   const onRefresh = async () => {
@@ -99,6 +106,7 @@ export default function HomeScreen({ navigation }) {
         style: 'success',
         onPress: async () => {
           await updateBookingStatus(booking.id, 'approved');
+          toast.success('Booking approved');
         },
       },
     ]);
@@ -112,6 +120,7 @@ export default function HomeScreen({ navigation }) {
         style: 'destructive',
         onPress: async () => {
           await updateBookingStatus(booking.id, 'rejected');
+          toast.error('Booking rejected');
         },
       },
     ]);
@@ -128,85 +137,102 @@ export default function HomeScreen({ navigation }) {
     },
     header: {
       backgroundColor: colors.headerBg,
-      paddingTop: 16,
-      paddingBottom: 28,
-      borderBottomLeftRadius: 28,
-      borderBottomRightRadius: 28,
+      paddingTop: 12,
+      paddingBottom: 20,
     },
     headerTop: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       paddingHorizontal: 20,
-      marginBottom: 20,
+      marginBottom: 16,
     },
-    greeting: {
-      fontSize: 15,
-      color: '#C5CAE9',
-      marginBottom: 4,
+    brandRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
     },
-    headerTitle: {
-      fontSize: 26,
-      fontWeight: 'bold',
-      color: colors.headerText,
-      lineHeight: 32,
-    },
-    adminAvatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+    brandIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 8,
       backgroundColor: 'rgba(255,255,255,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
+    },
+    brandText: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: colors.headerText,
+      letterSpacing: 0.3,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    headerIconBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    greeting: {
+      fontSize: 14,
+      color: 'rgba(255,255,255,0.6)',
+      paddingHorizontal: 20,
+      marginBottom: 2,
+    },
+    headerTitle: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: colors.headerText,
+      paddingHorizontal: 20,
+      marginBottom: 16,
     },
     searchBarHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.card,
+      backgroundColor: 'rgba(255,255,255,0.12)',
       marginHorizontal: 20,
-      borderRadius: 14,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
       gap: 10,
     },
     searchBarPlaceholder: {
       flex: 1,
-      fontSize: 15,
-      color: colors.textMuted,
-    },
-    searchMic: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: colors.primaryLight,
-      justifyContent: 'center',
-      alignItems: 'center',
+      fontSize: 14,
+      color: 'rgba(255,255,255,0.45)',
     },
     headerStats: {
       flexDirection: 'row',
-      marginTop: 20,
+      marginTop: 14,
       marginHorizontal: 20,
-      backgroundColor: 'rgba(255,255,255,0.15)',
-      borderRadius: 14,
-      padding: 14,
+      gap: 8,
     },
     headerStat: {
       flex: 1,
       alignItems: 'center',
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      borderRadius: 12,
+      paddingVertical: 10,
     },
     headerStatDivider: {
-      width: 1,
-      backgroundColor: 'rgba(255,255,255,0.2)',
+      width: 0,
     },
     headerStatNumber: {
-      fontSize: 22,
-      fontWeight: 'bold',
+      fontSize: 18,
+      fontWeight: '800',
       color: colors.headerText,
     },
     headerStatLabel: {
-      fontSize: 11,
-      color: '#C5CAE9',
-      marginTop: 2,
+      fontSize: 10,
+      color: 'rgba(255,255,255,0.5)',
+      marginTop: 1,
+      fontWeight: '500',
     },
 
     // Admin Section
@@ -377,54 +403,19 @@ export default function HomeScreen({ navigation }) {
       alignItems: 'center',
     },
 
-    // Contact Admin Banner
-    contactAdminBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.primary,
-      margin: 16,
-      marginBottom: 0,
-      padding: 16,
-      borderRadius: 16,
-    },
-    contactAdminLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    contactAdminIcon: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    contactAdminTitle: {
-      fontSize: 15,
-      fontWeight: 'bold',
-      color: '#fff',
-    },
-    contactAdminSubtitle: {
-      fontSize: 12,
-      color: '#C5CAE9',
-      marginTop: 1,
-    },
-
-    // Categories - Ad Banners
     categoriesSection: {
-      padding: 16,
+      paddingHorizontal: 16,
+      paddingTop: 16,
     },
     sectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-end',
+      alignItems: 'center',
       marginBottom: 14,
     },
     sectionTitle: {
-      fontSize: 19,
-      fontWeight: 'bold',
+      fontSize: 18,
+      fontWeight: '700',
       color: colors.text,
     },
     sectionSubtext: {
@@ -438,18 +429,13 @@ export default function HomeScreen({ navigation }) {
       fontWeight: '600',
     },
     adBannersContainer: {
-      gap: 12,
+      gap: 10,
     },
     adBannerCard: {
-      height: 110,
-      borderRadius: 18,
+      height: 88,
+      borderRadius: 14,
       overflow: 'hidden',
       position: 'relative',
-      shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 10,
-      elevation: 6,
     },
     adBannerImage: {
       width: '100%',
@@ -457,7 +443,7 @@ export default function HomeScreen({ navigation }) {
     },
     adBannerOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.45)',
+      backgroundColor: 'rgba(0,0,0,0.4)',
     },
     adBannerContent: {
       position: 'absolute',
@@ -466,51 +452,38 @@ export default function HomeScreen({ navigation }) {
       right: 0,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       padding: 14,
-      gap: 12,
     },
     adBannerIcon: {
-      width: 44,
-      height: 44,
-      borderRadius: 14,
-      justifyContent: 'center',
-      alignItems: 'center',
+      width: 0,
+      height: 0,
     },
     adBannerText: {
       flex: 1,
     },
     adBannerName: {
-      fontSize: 17,
-      fontWeight: 'bold',
+      fontSize: 15,
+      fontWeight: '700',
       color: '#fff',
     },
     adBannerTagline: {
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.8)',
-      marginTop: 2,
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.7)',
+      marginTop: 1,
     },
     adBannerRight: {
-      alignItems: 'center',
+      alignItems: 'flex-end',
+      marginLeft: 12,
     },
     adBannerCount: {
-      fontSize: 22,
-      fontWeight: 'bold',
+      fontSize: 18,
+      fontWeight: '800',
       color: '#fff',
     },
     adBannerCountLabel: {
       fontSize: 10,
-      color: 'rgba(255,255,255,0.7)',
-    },
-    adBannerArrow: {
-      position: 'absolute',
-      top: 12,
-      right: 12,
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      justifyContent: 'center',
-      alignItems: 'center',
+      color: 'rgba(255,255,255,0.6)',
     },
 
     // Popular Providers
@@ -575,22 +548,17 @@ export default function HomeScreen({ navigation }) {
       padding: 16,
     },
     aboutCard: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 18,
+      backgroundColor: colors.primaryLight,
+      borderRadius: 14,
+      padding: 16,
       flexDirection: 'row',
       alignItems: 'center',
-      shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 3,
     },
     aboutIconContainer: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      backgroundColor: colors.primaryLight,
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 14,
@@ -599,15 +567,15 @@ export default function HomeScreen({ navigation }) {
       flex: 1,
     },
     aboutTitle: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: colors.text,
-      marginBottom: 4,
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.primary,
+      marginBottom: 2,
     },
     aboutText: {
-      fontSize: 13,
+      fontSize: 12,
       color: colors.textSecondary,
-      lineHeight: 18,
+      lineHeight: 16,
     },
 
     // Search Results
@@ -721,93 +689,7 @@ export default function HomeScreen({ navigation }) {
       fontSize: 14,
       color: colors.textMuted,
     },
-    // Emergency
-    emergencySection: {
-      padding: 16,
-      paddingBottom: 0,
-    },
-    emergencyHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 4,
-    },
-    emergencyIconWrap: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: '#FEE2E2',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    emergencyTitle: {
-      fontSize: 19,
-      fontWeight: 'bold',
-      color: '#F44336',
-    },
-    emergencySubtitle: {
-      fontSize: 13,
-      color: colors.textMuted,
-      marginBottom: 12,
-    },
-    emergencyGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
-    },
-    emergencyCard: {
-      width: '48%',
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 14,
-      shadowColor: '#F44336',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 3,
-      alignItems: 'center',
-    },
-    emergencyCardIcon: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    emergencyCardIconInner: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    emergencyCardName: {
-      fontSize: 14,
-      fontWeight: 'bold',
-      color: colors.text,
-      marginBottom: 2,
-    },
-    emergencyCardDesc: {
-      fontSize: 11,
-      color: colors.textMuted,
-      marginBottom: 8,
-      textAlign: 'center',
-    },
-    emergencyCallBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 14,
-      gap: 4,
-    },
-    emergencyCallText: {
-      fontSize: 12,
-      fontWeight: 'bold',
-      color: '#fff',
-    },
-    section: { marginBottom: 24 },
+    section: { marginBottom: 8, paddingTop: 16 },
     recCard: {
       width: 140,
       padding: 14,
@@ -829,7 +711,7 @@ export default function HomeScreen({ navigation }) {
     recMatchText: { fontSize: 10, fontWeight: '600' },
   });
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   const renderSearchResult = ({ item }) => (
     <TouchableOpacity
@@ -856,8 +738,8 @@ export default function HomeScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <HomeSkeleton colors={colors} />
       </View>
     );
   }
@@ -880,6 +762,7 @@ export default function HomeScreen({ navigation }) {
                 value={searchQuery}
                 onChangeText={handleSearch}
                 autoFocus
+                maxLength={100}
                 accessibilityLabel="Search services"
               />
               {searchQuery.length > 0 && (
@@ -924,18 +807,45 @@ export default function HomeScreen({ navigation }) {
         {/* Hero Header */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.greeting}>
-                {user ? `Hello, ${user.name?.split(' ')[0]}` : 'Hello!'}
-              </Text>
-              <Text style={styles.headerTitle}>Find trusted services{'\n'}in Nampundwe</Text>
-            </View>
-            {user && user.role === 'admin' && (
-              <View style={styles.adminAvatar}>
-                <Ionicons name="shield-checkmark" size={22} color="#fff" />
+            <View style={styles.brandRow}>
+              <View style={styles.brandIcon}>
+                <Ionicons name="cube" size={18} color="#fff" />
               </View>
-            )}
+              <Text style={styles.brandText}>Nadma</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('Notifications')}
+                accessibilityLabel="Notifications"
+                accessibilityRole="button"
+              >
+                <Ionicons name="notifications-outline" size={19} color="#fff" />
+                {unreadNotifCount > 0 && (
+                  <View style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: '#fff' }}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              {user && user.role === 'admin' && (
+                <TouchableOpacity
+                  style={styles.headerIconBtn}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('Profile', { screen: 'Admin' })}
+                  accessibilityLabel="Admin panel"
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="shield-checkmark-outline" size={19} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
+
+          <Text style={styles.greeting}>
+            {user ? `Hello, ${user.name?.split(' ')[0]}` : 'Hello!'}
+          </Text>
+          <Text style={styles.headerTitle}>What service do you{'\n'}need today?</Text>
 
           <TouchableOpacity
             style={styles.searchBarHeader}
@@ -944,22 +854,8 @@ export default function HomeScreen({ navigation }) {
             accessibilityLabel="Search services"
             accessibilityRole="button"
           >
-            <Ionicons name="search" size={20} color={colors.textMuted} />
-            <Text style={styles.searchBarPlaceholder}>Search for services, providers...</Text>
-            <View style={styles.searchMic}>
-              <Ionicons name="mic" size={18} color={colors.primary} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: 20, marginTop: 12, paddingVertical: 10, borderRadius: 12, gap: 8 }}
-            onPress={() => navigation.navigate('Map')}
-            accessibilityLabel="View service map"
-            accessibilityRole="button"
-          >
-            <Ionicons name="map" size={18} color="#fff" />
-            <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600' }}>View Service Map</Text>
-            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="search" size={17} color="rgba(255,255,255,0.4)" />
+            <Text style={styles.searchBarPlaceholder}>Search services or providers...</Text>
           </TouchableOpacity>
 
           <View style={styles.headerStats}>
@@ -967,15 +863,9 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.headerStatNumber}>{registeredBusinesses.length}</Text>
               <Text style={styles.headerStatLabel}>Providers</Text>
             </View>
-            <View style={styles.headerStatDivider} />
             <View style={styles.headerStat}>
               <Text style={styles.headerStatNumber}>{categories.length}</Text>
-              <Text style={styles.headerStatLabel}>Categories</Text>
-            </View>
-            <View style={styles.headerStatDivider} />
-            <View style={styles.headerStat}>
-              <Text style={styles.headerStatNumber}>{pendingBookings.length}</Text>
-              <Text style={styles.headerStatLabel}>Pending</Text>
+              <Text style={styles.headerStatLabel}>Services</Text>
             </View>
           </View>
         </View>
@@ -991,14 +881,14 @@ export default function HomeScreen({ navigation }) {
               accessibilityRole="button"
             >
               <View style={styles.bannerIconCircle}>
-                <Ionicons name="add-circle" size={28} color="#fff" />
+                <Ionicons name="add-circle" size={24} color="#fff" />
               </View>
               <View style={styles.registerBannerText}>
                 <Text style={styles.registerBannerTitle}>Register a Business</Text>
                 <Text style={styles.registerBannerSubtitle}>Add a new service listing</Text>
               </View>
               <View style={styles.bannerArrow}>
-                <Ionicons name="chevron-forward" size={20} color="#fff" />
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
               </View>
             </TouchableOpacity>
 
@@ -1007,7 +897,7 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.pendingHeader}>
                   <View style={styles.pendingHeaderLeft}>
                     <View style={styles.pendingIconCircle}>
-                      <Ionicons name="time" size={18} color="#FF9800" />
+                      <Ionicons name="time" size={16} color="#FF9800" />
                     </View>
                     <Text style={styles.pendingTitle}>Pending Bookings</Text>
                     <View style={styles.pendingCountBadge}>
@@ -1021,7 +911,7 @@ export default function HomeScreen({ navigation }) {
                     accessibilityRole="button"
                   >
                     <Text style={styles.viewAllText}>View All</Text>
-                    <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+                    <Ionicons name="arrow-forward" size={12} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
                 {pendingBookings.slice(0, 3).map((booking) => (
@@ -1036,7 +926,7 @@ export default function HomeScreen({ navigation }) {
                         <Text style={styles.bookingUser}>{booking.userName}</Text>
                         <Text style={styles.bookingService}>{booking.businessName}</Text>
                         <View style={styles.bookingMeta}>
-                          <Ionicons name="calendar-outline" size={12} color={colors.textMuted} />
+                          <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
                           <Text style={styles.bookingTime}>{booking.date} at {booking.time}</Text>
                         </View>
                       </View>
@@ -1049,7 +939,7 @@ export default function HomeScreen({ navigation }) {
                         accessibilityLabel={`Approve booking by ${booking.userName}`}
                         accessibilityRole="button"
                       >
-                        <Ionicons name="checkmark" size={18} color="#fff" />
+                        <Ionicons name="checkmark" size={16} color="#fff" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.rejectBtn}
@@ -1058,7 +948,7 @@ export default function HomeScreen({ navigation }) {
                         accessibilityLabel={`Reject booking by ${booking.userName}`}
                         accessibilityRole="button"
                       >
-                        <Ionicons name="close" size={18} color="#fff" />
+                        <Ionicons name="close" size={16} color="#fff" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1068,95 +958,43 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* Contact Admin Banner for Users */}
-        {user && user.role !== 'admin' && (
-          <TouchableOpacity
-            style={styles.contactAdminBanner}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('Chat', {
-              receiverId: 'admin',
-              receiverName: 'Admin Support',
-              conversationType: 'admin',
-            })}
-            accessibilityLabel="Contact admin support"
-            accessibilityRole="button"
-          >
-            <View style={styles.contactAdminLeft}>
-              <View style={styles.contactAdminIcon}>
-                <Ionicons name="help-buoy" size={22} color="#fff" />
+        {/* Provider Dashboard Banner */}
+        {user && user.role === 'provider' && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={[styles.registerBanner, { backgroundColor: '#1B5E20' }]}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('Profile', { screen: 'ProviderDashboard' })}
+              accessibilityLabel="My business dashboard"
+              accessibilityRole="button"
+            >
+              <View style={styles.bannerIconCircle}>
+                <Ionicons name="business" size={24} color="#fff" />
               </View>
-              <View>
-                <Text style={styles.contactAdminTitle}>Need Help?</Text>
-                <Text style={styles.contactAdminSubtitle}>Contact admin support</Text>
+              <View style={styles.registerBannerText}>
+                <Text style={styles.registerBannerTitle}>My Business Dashboard</Text>
+                <Text style={styles.registerBannerSubtitle}>View bookings, reviews, and stats</Text>
               </View>
-            </View>
-            <Ionicons name="chatbubbles-outline" size={22} color="#fff" />
-          </TouchableOpacity>
+              <View style={styles.bannerArrow}>
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* Emergency Services */}
-        <View style={styles.emergencySection}>
-          <View style={styles.emergencyHeader}>
-            <View style={styles.emergencyIconWrap}>
-              <Ionicons name="flash" size={20} color="#F44336" />
-            </View>
-            <Text style={styles.emergencyTitle}>Quick Emergency Help</Text>
-          </View>
-          <Text style={styles.emergencySubtitle}>Tap to call immediately</Text>
-          <View style={styles.emergencyGrid}>
-            {[
-              { name: 'Plumber', icon: 'water', phone: '+260970000001', color: '#2196F3', desc: 'Burst pipes, leaks' },
-              { name: 'Electrician', icon: 'flash', phone: '+260970000002', color: '#FF9800', desc: 'Power outages, faults' },
-              { name: 'Carpenter', icon: 'hammer', phone: '+260970000003', color: '#795548', desc: 'Locks, doors, windows' },
-              { name: 'General', icon: 'construct', phone: '+260970000004', color: '#4CAF50', desc: 'Any urgent repair' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.name}
-                style={styles.emergencyCard}
-                activeOpacity={0.8}
-                onPress={() => {
-                  hapticMedium();
-                  Alert.alert(
-                    `Call ${item.name}?`,
-                    item.desc,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Call Now', onPress: () => Linking.openURL(`tel:${item.phone}`) },
-                    ]
-                  );
-                }}
-                accessibilityLabel={`Call ${item.name}`}
-                accessibilityRole="button"
-              >
-                <View style={[styles.emergencyCardIcon, { backgroundColor: item.color + '20' }]}>
-                  <View style={[styles.emergencyCardIconInner, { backgroundColor: item.color }]}>
-                    <Ionicons name={item.icon} size={20} color="#fff" />
-                  </View>
-                </View>
-                <Text style={styles.emergencyCardName}>{item.name}</Text>
-                <Text style={styles.emergencyCardDesc}>{item.desc}</Text>
-                <View style={[styles.emergencyCallBtn, { backgroundColor: item.color }]}>
-                  <Ionicons name="call" size={14} color="#fff" />
-                  <Text style={styles.emergencyCallText}>Call</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         {/* Recommended for You */}
-        {recommended.length > 0 && (
+        {user && user.role !== 'admin' && recommended.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Recommended for You</Text>
-              <Ionicons name="sparkles" size={18} color={colors.primary} />
+              <Text style={styles.sectionTitle}>Recommended for You</Text>
+              <Ionicons name="sparkles" size={16} color={colors.primary} />
             </View>
             <FlatList
               horizontal
               data={recommended}
               keyExtractor={(item) => item.id}
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[styles.recCard, { backgroundColor: colors.card }]}
@@ -1171,25 +1009,19 @@ export default function HomeScreen({ navigation }) {
                   <Text style={[styles.recName, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
                   <Text style={[styles.recCategory, { color: colors.textSecondary }]}>{item.category}</Text>
                   <View style={styles.recRating}>
-                    <Ionicons name="star" size={12} color="#FFD700" />
+                    <Ionicons name="star" size={11} color="#FFD700" />
                     <Text style={[styles.recRatingText, { color: colors.textSecondary }]}>{item.rating?.toFixed(1) || 'New'}</Text>
                   </View>
-                  {item.matchScore > 10 && (
-                    <View style={[styles.recMatchBadge, { backgroundColor: colors.primary + '15' }]}>
-                      <Text style={[styles.recMatchText, { color: colors.primary }]}>Great Match</Text>
-                    </View>
-                  )}
                 </TouchableOpacity>
               )}
             />
           </View>
         )}
 
-        {/* Service Categories - Ad Banners */}
+        {/* Service Categories */}
         <View style={styles.categoriesSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Our Services</Text>
-            <Text style={styles.sectionSubtext}>Browse trusted local providers</Text>
+            <Text style={styles.sectionTitle}>Services</Text>
           </View>
           <View style={styles.adBannersContainer}>
             {categories.map((category) => {
@@ -1206,9 +1038,6 @@ export default function HomeScreen({ navigation }) {
                   <Image source={{ uri: category.image }} style={styles.adBannerImage} />
                   <View style={styles.adBannerOverlay} />
                   <View style={styles.adBannerContent}>
-                    <View style={[styles.adBannerIcon, { backgroundColor: category.color }]}>
-                      <Ionicons name={category.icon} size={22} color="#fff" />
-                    </View>
                     <View style={styles.adBannerText}>
                       <Text style={styles.adBannerName}>{category.name}</Text>
                       <Text style={styles.adBannerTagline} numberOfLines={1}>{category.tagline}</Text>
@@ -1217,9 +1046,6 @@ export default function HomeScreen({ navigation }) {
                       <Text style={styles.adBannerCount}>{count}</Text>
                       <Text style={styles.adBannerCountLabel}>providers</Text>
                     </View>
-                  </View>
-                  <View style={styles.adBannerArrow}>
-                    <Ionicons name="arrow-forward" size={18} color="#fff" />
                   </View>
                 </AnimatedCard>
               );
@@ -1231,7 +1057,7 @@ export default function HomeScreen({ navigation }) {
         {registeredBusinesses.length > 0 && (
           <View style={styles.popularSection}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Popular Providers</Text>
+              <Text style={styles.sectionTitle}>Top Providers</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularScroll}>
               {registeredBusinesses.slice(0, 6).map((business) => (
@@ -1247,7 +1073,7 @@ export default function HomeScreen({ navigation }) {
                   <View style={styles.popularOverlay} />
                   <View style={styles.popularInfo}>
                     <View style={styles.popularRating}>
-                      <Ionicons name="star" size={12} color="#FFD700" />
+                      <Ionicons name="star" size={11} color="#FFD700" />
                       <Text style={styles.popularRatingText}>{business.rating || 'New'}</Text>
                     </View>
                     <Text style={styles.popularName} numberOfLines={1}>{business.name}</Text>
@@ -1259,23 +1085,22 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* About Card */}
+        {/* About */}
         <View style={styles.aboutSection}>
           <View style={styles.aboutCard}>
             <View style={styles.aboutIconContainer}>
-              <Ionicons name="information-circle" size={28} color={colors.primary} />
+              <Ionicons name="cube" size={20} color="#fff" />
             </View>
             <View style={styles.aboutContent}>
               <Text style={styles.aboutTitle}>About Nadma</Text>
               <Text style={styles.aboutText}>
                 Connecting Nampundwe with trusted local service providers.
-                Find plumbers, electricians, carpenters, and more.
               </Text>
             </View>
           </View>
         </View>
 
-        <View style={{ height: 30 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
     </SafeAreaView>
   );

@@ -12,6 +12,7 @@ import {
   TextInput,
   Share,
   ActivityIndicator,
+  RefreshControl,
   LayoutAnimation,
   UIManager,
   Platform,
@@ -23,11 +24,15 @@ if (Platform.OS === 'android') {
 import { Ionicons } from '@expo/vector-icons';
 import { cancelBooking, getCurrentUser, addReview, getReviews, onUserBookingsSnapshot } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { hapticLight, hapticWarning } from '../utils/haptics';
+import { useNetworkAction } from '../utils/useNetworkAction';
 import { createStyleSheet } from '../utils/responsive';
 
 export default function MyBookingsScreen({ navigation }) {
   const { colors } = useTheme();
+  const toast = useToast();
+  const { run } = useNetworkAction();
   const [bookings, setBookings] = useState([]);
   const [user, setUser] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -74,10 +79,10 @@ export default function MyBookingsScreen({ navigation }) {
       {
         text: 'Yes, Cancel',
         style: 'destructive',
-          onPress: async () => {
+          onPress: () => run(async () => {
             await cancelBooking(booking.id);
             animateList();
-        },
+        }),
       },
     ]);
   };
@@ -93,7 +98,7 @@ export default function MyBookingsScreen({ navigation }) {
     setShowRateModal(true);
   };
 
-  const submitRating = async () => {
+  const submitRating = () => run(async () => {
     if (!selectedBooking) return;
     const review = {
       id: 'review_' + Date.now(),
@@ -107,11 +112,11 @@ export default function MyBookingsScreen({ navigation }) {
     const result = await addReview(review);
     if (result === true || result?.success !== false) {
       setShowRateModal(false);
-      Alert.alert('Thanks!', 'Your review has been submitted.');
+      toast.success('Review submitted');
     } else {
-      Alert.alert('Error', result?.error || 'Failed to submit review.');
+      toast.error(result?.error || 'Failed to submit review');
     }
-  };
+  });
 
   const shareReceipt = (booking) => {
     const message = `Nadma Booking Receipt\n\nProvider: ${booking.businessName}\nDate: ${booking.date}\nTime: ${booking.time}\nStatus: ${booking.status.toUpperCase()}\n\nBooked via Nadma - Nampundwe Services`;
@@ -155,7 +160,7 @@ export default function MyBookingsScreen({ navigation }) {
   const filteredBookings =
     filter === 'all' ? bookings : bookings.filter((b) => b.status === filter);
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   const renderBooking = ({ item }) => (
     <View style={styles.card}>
@@ -289,6 +294,7 @@ export default function MyBookingsScreen({ navigation }) {
               onChangeText={setReviewText}
               multiline
               textAlignVertical="top"
+              maxLength={1000}
             />
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity style={{ flex: 1, padding: 14, alignItems: 'center', borderRadius: 14, backgroundColor: colors.borderLight }} onPress={() => setShowRateModal(false)}>

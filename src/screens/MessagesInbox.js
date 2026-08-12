@@ -1,468 +1,417 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
   SafeAreaView,
   Modal,
   StatusBar,
   ActivityIndicator,
-  Animated,
+  Pressable,
 } from 'react-native';
-import AnimatedCard from '../components/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import {
-  getConversationsForUser,
-  getConversationsForAdmin,
+  onConversationsSnapshot,
   getCurrentUser,
   getAllUsers,
+  onUserStatusSnapshot,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { createStyleSheet } from '../utils/responsive';
+
+const FILTER_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'business', label: 'Business' },
+  { key: 'admin', label: 'Admin' },
+  { key: 'user', label: 'Users' },
+];
 
 export default function MessagesInbox({ navigation }) {
   const { colors } = useTheme();
   const [conversations, setConversations] = useState([]);
   const [user, setUser] = useState(null);
-  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [filter, setFilter] = useState('all');
   const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const emptyOpacity = useRef(new Animated.Value(0)).current;
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [onlineStatuses, setOnlineStatuses] = useState({});
+  const unsubsRef = useRef([]);
 
   useEffect(() => {
-    Animated.timing(emptyOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    getCurrentUser().then((u) => {
+      setUser(u);
+      setLoading(false);
+      if (u) {
+        getAllUsers().then((users) => {
+          setAllUsers(users.filter((usr) => usr.id !== u.id));
+        });
+      }
+    });
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      getCurrentUser().then(async (u) => {
-        setUser(u);
-        if (u) {
-          if (u.role === 'admin') {
-            const convos = await getConversationsForAdmin(u.id);
-            setConversations(convos);
-          } else {
-            const convos = await getConversationsForUser(u.id);
-            setConversations(convos);
-          }
-          const users = await getAllUsers();
-          setAllUsers(users.filter((usr) => usr.id !== u.id));
-        }
-        setLoading(false);
+  useEffect(() => {
+    if (!user) return;
+    unsubsRef.current.forEach((fn) => fn());
+    unsubsRef.current = [];
+    const filterType = filter === 'all' ? null : filter;
+    const unsub = onConversationsSnapshot(user.id, (convos) => {
+      setConversations(convos);
+    }, filterType);
+    unsubsRef.current.push(unsub);
+    return () => {
+      unsubsRef.current.forEach((fn) => fn());
+      unsubsRef.current = [];
+    };
+  }, [user?.id, filter]);
+
+  useEffect(() => {
+    const userIds = conversations.map((c) => c.otherId).filter(Boolean);
+    const newUnsubs = [];
+    userIds.forEach((uid) => {
+      if (uid === 'admin') return;
+      const unsub = onUserStatusSnapshot(uid, (status) => {
+        setOnlineStatuses((prev) => ({ ...prev, [uid]: status?.isOnline === true }));
       });
-    }, [])
-  );
+      newUnsubs.push(unsub);
+    });
+    return () => newUnsubs.forEach((fn) => fn());
+  }, [conversations]);
 
-  const getIcon = (type) => {
-    switch (type) {
-      case 'admin': return 'shield';
-      case 'user': return 'person';
-      case 'business': return 'storefront';
-      default: return 'chatbubbles';
-    }
-  };
-
-  const getColor = (type) => {
-    switch (type) {
-      case 'admin': return '#F44336';
-      case 'user': return '#2196F3';
-      case 'business': return '#1a237e';
-      default: return '#666';
-    }
-  };
-
-  const getInitials = (name) => name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
-
-  const startChatWithUser = (selectedUser) => {
-    setShowNewChatModal(false);
+  const openChat = (conv) => {
     navigation.navigate('Chat', {
-      receiverId: selectedUser.id,
-      receiverName: selectedUser.name,
+      businessId: conv.conversationType === 'business' ? conv.businessId : undefined,
+      businessName: conv.conversationType === 'business' ? conv.businessName : undefined,
+      receiverId: conv.otherId,
+      receiverName: conv.otherName || conv.businessName || 'Unknown',
+      conversationType: conv.conversationType,
+    });
+  };
+
+  const startAdminChat = () => {
+    setShowNewChat(false);
+    navigation.navigate('Chat', {
+      receiverId: 'admin',
+      receiverName: 'Admin Support',
+      conversationType: 'admin',
+    });
+  };
+
+  const startUserChat = (usr) => {
+    setShowNewChat(false);
+    navigation.navigate('Chat', {
+      receiverId: usr.id,
+      receiverName: usr.name,
       conversationType: 'user',
     });
   };
 
-  const renderConversation = ({ item }) => {
-    const type = item.conversationType || 'business';
-    const displayName = type === 'business' ? item.businessName : item.otherName;
-    const color = getColor(type);
+  const getInitials = (name) => name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 
+  const renderConversation = useCallback(({ item }) => {
+    const isOnline = onlineStatuses[item.otherId] === true;
+    const displayName = item.otherName || item.businessName || 'Unknown';
     return (
-      <AnimatedCard
-        style={styles.conversationCard}
-        activeOpacity={0.7}
-        onPress={() =>
-          navigation.navigate('Chat', {
-            businessId: type === 'business' ? item.businessId : undefined,
-            businessName: type === 'business' ? item.businessName : undefined,
-            receiverId: type === 'business' ? item.businessId : item.otherId,
-            receiverName: displayName,
-            conversationType: type,
-          })
-        }
-        accessibilityLabel={`Chat with ${displayName}`}
-        accessibilityRole="button"
+      <Pressable
+        style={[styles.convRow, { borderBottomColor: colors.border }]}
+        onPress={() => openChat(item)}
       >
-        <View style={[styles.avatar, { backgroundColor: color + '18' }]}>
-          <Text style={[styles.avatarText, { color }]}>{getInitials(displayName)}</Text>
+        <View style={[styles.convAvatar, { backgroundColor: colors.primaryLight }]}>
+          <Text style={[styles.convAvatarText, { color: colors.primary }]}>
+            {getInitials(displayName)}
+          </Text>
+          {isOnline && <View style={[styles.convOnlineDot, { backgroundColor: '#4CAF50' }]} />}
         </View>
-        <View style={styles.conversationInfo}>
-          <View style={styles.nameRow}>
-            <Text style={styles.businessName} numberOfLines={1}>{displayName}</Text>
-            {type === 'admin' && (
-              <View style={styles.adminBadge}>
-                <Text style={styles.adminBadgeText}>ADMIN</Text>
+        <View style={styles.convBody}>
+          <View style={styles.convTopRow}>
+            <Text style={[styles.convName, { color: colors.text }]} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={[styles.convTime, { color: colors.chatTime }]}>
+              {item.lastMessage?.timestamp
+                ? new Date(item.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : ''}
+            </Text>
+          </View>
+          <View style={styles.convBottomRow}>
+            <Text style={[styles.convPreview, { color: colors.chatPreview }]} numberOfLines={1}>
+              {item.lastMessage?.text || 'No messages yet'}
+            </Text>
+            {item.unread > 0 && (
+              <View style={[styles.convBadge, { backgroundColor: colors.chatUnreadBg }]}>
+                <Text style={styles.convBadgeText}>{item.unread}</Text>
               </View>
             )}
           </View>
-          <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage.text}
-          </Text>
         </View>
-        <View style={styles.meta}>
-          <Text style={styles.time}>
-            {new Date(item.lastMessage.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </Text>
-          {item.unread > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unread}</Text>
-            </View>
-          )}
-        </View>
-      </AnimatedCard>
+      </Pressable>
     );
-  };
+  }, [onlineStatuses, colors]);
 
-  const styles = getStyles(colors);
+  const styles = createStyles(colors);
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={colors.statusBar} backgroundColor={colors.headerBg} />
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Messages</Text>
-          <Text style={styles.headerSubtitle}>{conversations.length} conversation{conversations.length !== 1 ? 's' : ''}</Text>
-        </View>
-        <TouchableOpacity style={styles.newChatBtn} onPress={() => setShowNewChatModal(true)} accessibilityLabel="Start new conversation" accessibilityRole="button">
-          <Ionicons name="create-outline" size={22} color="#fff" />
-        </TouchableOpacity>
+
+      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
+        <Text style={[styles.headerTitle, { color: colors.headerText }]}>Messages</Text>
+      </View>
+
+      <View style={[styles.filterBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        {FILTER_TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[
+              styles.filterTab,
+              filter === tab.key && [styles.filterTabActive, { backgroundColor: colors.primary }],
+            ]}
+            onPress={() => setFilter(tab.key)}
+          >
+            <Text
+              style={[
+                styles.filterLabel,
+                { color: filter === tab.key ? '#fff' : colors.textMuted },
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <FlatList
         data={conversations}
         renderItem={renderConversation}
         keyExtractor={(item) => item.otherId}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={conversations.length === 0 ? styles.emptyList : styles.list}
         ListEmptyComponent={
-          <Animated.View style={{ opacity: emptyOpacity, alignItems: 'center', paddingTop: 80 }}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="chatbubbles-outline" size={40} color={colors.textMuted} />
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.chatDatePill }]}>
+              <Ionicons name="chatbubbles-outline" size={36} color={colors.chatSendBtn} />
             </View>
-            <Text style={styles.emptyText}>No conversations yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start a conversation from a service page{'\n'}or contact admin support
+            <Text style={[styles.emptyTitle, { color: colors.chatDateText }]}>No conversations</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.chatTime }]}>
+              Start a new conversation below
             </Text>
-          </Animated.View>
+          </View>
         }
       />
 
-      {/* New Chat Modal */}
-      <Modal visible={showNewChatModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>New Conversation</Text>
-              <TouchableOpacity onPress={() => setShowNewChatModal(false)} accessibilityLabel="Close" accessibilityRole="button">
-                <Ionicons name="close" size={24} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.chatSendBtn }]}
+        onPress={() => setShowNewChat(true)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="create" size={22} color="#fff" />
+      </TouchableOpacity>
+
+      <Modal visible={showNewChat} animationType="slide" transparent>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowNewChat(false)}>
+          <Pressable style={[styles.modalContent, { backgroundColor: colors.card }]} onPress={() => {}}>
+            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.modalTitle, { color: colors.text }]}>New Conversation</Text>
 
             {user?.role !== 'admin' && (
-              <TouchableOpacity
-                style={styles.newChatOption}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setShowNewChatModal(false);
-                  navigation.navigate('Chat', {
-                    receiverId: 'admin',
-                    receiverName: 'Admin Support',
-                    conversationType: 'admin',
-                  });
-                }}
-                accessibilityLabel="Chat with admin support"
-                accessibilityRole="button"
-              >
-                <View style={[styles.optionIcon, { backgroundColor: '#FFEBEE' }]}>
-                  <Ionicons name="shield" size={24} color="#F44336" />
+              <Pressable style={[styles.modalOption, { backgroundColor: colors.inputBg }]} onPress={startAdminChat}>
+                <View style={[styles.modalOptionIcon, { backgroundColor: '#FFEBEE' }]}>
+                  <Ionicons name="shield" size={22} color="#F44336" />
                 </View>
-                <View style={styles.optionInfo}>
-                  <Text style={styles.optionName}>Admin Support</Text>
-                  <Text style={styles.optionSubtext}>Get help from the admin</Text>
+                <View style={styles.modalOptionInfo}>
+                  <Text style={[styles.modalOptionName, { color: colors.text }]}>Admin Support</Text>
+                  <Text style={[styles.modalOptionSub, { color: colors.textMuted }]}>Get help from admin</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-              </TouchableOpacity>
+              </Pressable>
             )}
 
-            {allUsers.length > 0 && (
-              <>
-                <Text style={styles.userSectionTitle}>Other Users</Text>
-                {allUsers.filter((u) => u.role !== 'admin').map((usr) => (
-                  <TouchableOpacity
-                    key={usr.id}
-                    style={styles.newChatOption}
-                    activeOpacity={0.7}
-                    onPress={() => startChatWithUser(usr)}
-                    accessibilityLabel={`Chat with ${usr.name}`}
-                    accessibilityRole="button"
-                  >
-                    <View style={[styles.optionIcon, { backgroundColor: '#E3F2FD' }]}>
-                      <Text style={styles.optionIconText}>{getInitials(usr.name)}</Text>
-                    </View>
-                    <View style={styles.optionInfo}>
-                      <Text style={styles.optionName}>{usr.name}</Text>
-                      <Text style={styles.optionSubtext}>{usr.email}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                  </TouchableOpacity>
-                ))}
-              </>
+            {allUsers.filter((u) => u.role !== 'admin').length > 0 && (
+              <Text style={[styles.modalSection, { color: colors.textMuted }]}>USERS</Text>
             )}
-          </View>
-        </View>
+            {allUsers.filter((u) => u.role !== 'admin').map((usr) => (
+              <Pressable
+                key={usr.id}
+                style={[styles.modalOption, { backgroundColor: colors.inputBg }]}
+                onPress={() => startUserChat(usr)}
+              >
+                <View style={[styles.modalOptionAvatar, { backgroundColor: colors.primaryLight }]}>
+                  <Text style={[styles.modalOptionAvatarText, { color: colors.primary }]}>
+                    {getInitials(usr.name)}
+                  </Text>
+                </View>
+                <View style={styles.modalOptionInfo}>
+                  <Text style={[styles.modalOptionName, { color: colors.text }]}>{usr.name}</Text>
+                  <Text style={[styles.modalOptionSub, { color: colors.textMuted }]}>{usr.email}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const getStyles = (colors) => createStyleSheet({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
+const createStyles = (colors) => createStyleSheet({
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    backgroundColor: colors.headerBg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingBottom: 10,
+  },
+  headerTitle: { fontSize: 22, fontWeight: 'bold' },
+  filterBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    paddingTop: 12,
-    paddingBottom: 18,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.headerText,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#C5CAE9',
-    marginTop: 2,
-  },
-  newChatBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  list: {
-    padding: 16,
-    paddingBottom: 20,
-  },
-  conversationCard: {
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  conversationInfo: {
-    flex: 1,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     gap: 6,
+    borderBottomWidth: 1,
   },
-  businessName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    flex: 1,
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  adminBadge: {
-    backgroundColor: '#FEE2E2',
+  filterTabActive: {},
+  filterLabel: { fontSize: 13, fontWeight: '600' },
+  list: { paddingBottom: 80 },
+  emptyList: { flex: 1 },
+  convRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+  },
+  convAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  convAvatarText: { fontSize: 17, fontWeight: 'bold' },
+  convOnlineDot: {
+    width: 12,
+    height: 12,
     borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderWidth: 2,
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
   },
-  adminBadgeText: {
-    color: '#F44336',
-    fontSize: 9,
-    fontWeight: 'bold',
+  convBody: { flex: 1 },
+  convTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  lastMessage: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: 3,
+  convName: { fontSize: 15, fontWeight: '600', flex: 1, marginRight: 8 },
+  convTime: { fontSize: 11 },
+  convBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  meta: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  time: {
-    fontSize: 11,
-    color: colors.textMuted,
-  },
-  unreadBadge: {
-    backgroundColor: '#1a237e',
+  convPreview: { fontSize: 13, flex: 1, marginRight: 8 },
+  convBadge: {
     borderRadius: 10,
-    minWidth: 22,
-    height: 22,
+    minWidth: 20,
+    height: 20,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 6,
   },
-  unreadText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 80,
-  },
+  convBadgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 60 },
   emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.borderLight,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 4,
+  emptyTitle: { fontSize: 17, fontWeight: '600', marginBottom: 4 },
+  emptySubtitle: { fontSize: 13 },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '70%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 20,
-    paddingBottom: 32,
+    paddingBottom: 36,
+    maxHeight: '70%',
   },
   modalHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.border,
     alignSelf: 'center',
     marginBottom: 16,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  newChatOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    backgroundColor: colors.inputBg,
-    borderRadius: 14,
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16 },
+  modalSection: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 14,
     marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 6,
     gap: 12,
   },
-  optionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  modalOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  optionIconText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2196F3',
+  modalOptionAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  optionInfo: {
-    flex: 1,
-  },
-  optionName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  optionSubtext: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  userSectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textMuted,
-    marginTop: 8,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+  modalOptionAvatarText: { fontSize: 15, fontWeight: 'bold' },
+  modalOptionInfo: { flex: 1 },
+  modalOptionName: { fontSize: 14, fontWeight: '600' },
+  modalOptionSub: { fontSize: 12, marginTop: 1 },
 });

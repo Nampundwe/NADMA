@@ -1,20 +1,20 @@
-import { auth, db } from '../config/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { auth, db, storage } from '../config/firebase';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail, sendEmailVerification, reload } from 'firebase/auth';
 import {
   collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, writeBatch, serverTimestamp, onSnapshot
+  query, where, orderBy, writeBatch, onSnapshot, add
 } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-const ADMIN_EMAILS = ['munangimuyambangorodwell@gmail.com', 'munangimuyambangorodwell'];
+const FIRST_ADMIN_EMAIL = 'munangimuyambangorodwell@gmail.com';
 
 let localCurrentUser = null;
 let localCache = null;
 let localCacheTimestamp = null;
 
-const isAdminEmail = (email) => {
+const isFirstAdminSignup = (email) => {
   if (!email) return false;
-  const lower = email.toLowerCase();
-  return ADMIN_EMAILS.some(e => lower === e.toLowerCase());
+  return email.toLowerCase() === FIRST_ADMIN_EMAIL.toLowerCase();
 };
 
 const defaultCategories = [
@@ -51,6 +51,7 @@ const COLLECTIONS = {
   posts: 'posts',
   categories: 'categories',
   settings: 'settings',
+  follows: 'follows',
 };
 
 const col = (name) => collection(db, name);
@@ -168,12 +169,11 @@ export const deleteCategory = async (categoryId) => {
   }
 };
 
-export const signup = async (email, password, name, role = 'user') => {
+export const signup = async (email, password, name, role = 'user', providerInfo = null) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const firebaseUser = userCredential.user;
-    const isAdmin = isAdminEmail(email);
-    const userRole = isAdmin ? 'admin' : role;
+    const userRole = isFirstAdminSignup(email) ? 'admin' : role;
     const userData = {
       id: firebaseUser.uid,
       email,
@@ -183,11 +183,38 @@ export const signup = async (email, password, name, role = 'user') => {
       createdAt: new Date().toISOString(),
     };
     await set(COLLECTIONS.users, firebaseUser.uid, userData);
+    if (userRole === 'provider' && providerInfo) {
+      const providerId = 'sp_' + Date.now();
+      const providerData = {
+        id: providerId,
+        ownerId: firebaseUser.uid,
+        name: providerInfo.businessName || name,
+        category: providerInfo.category || 'General',
+        description: providerInfo.description || `Professional services`,
+        phone: providerInfo.phone || '',
+        address: providerInfo.address || '',
+        hours: providerInfo.hours || 'Mon-Sat: 8:00 AM - 5:00 PM',
+        services: providerInfo.services || ['General Service'],
+        rating: 0,
+        reviews: 0,
+        image: providerInfo.image || 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=400',
+        isUserRegistered: true,
+        createdAt: new Date().toISOString(),
+      };
+      await set(COLLECTIONS.providers, providerId, providerData);
+      userData.providerId = providerId;
+      await update(COLLECTIONS.users, firebaseUser.uid, { providerId });
+    }
     localCurrentUser = userData;
     return { success: true, user: userData };
   } catch (error) {
-    const msg = error.code === 'auth/email-already-in-use' ? 'Email already registered' : 'Signup failed';
-    return { success: false, error: msg };
+    if (error.code === 'auth/email-already-in-use') {
+      return { success: false, error: 'Email already registered' };
+    }
+    if (error.code === 'auth/invalid-email') {
+      return { success: false, error: 'Invalid email address' };
+    }
+    return { success: false, error: 'Signup failed. Please check your email and try again.' };
   }
 };
 
@@ -204,7 +231,7 @@ export const login = async (email, password) => {
         id: firebaseUser.uid,
         email: firebaseUser.email,
         name: firebaseUser.displayName || firebaseUser.email,
-        role: isAdminEmail(email) ? 'admin' : 'user',
+        role: 'user',
         banned: false,
         createdAt: new Date().toISOString(),
       };
@@ -213,10 +240,6 @@ export const login = async (email, password) => {
     if (userData.banned) {
       await signOut(auth);
       return { success: false, error: 'Account has been banned' };
-    }
-    if (isAdminEmail(email) && userData.role !== 'admin') {
-      userData.role = 'admin';
-      await update(COLLECTIONS.users, firebaseUser.uid, { role: 'admin' });
     }
     localCurrentUser = userData;
     return { success: true, user: userData };
@@ -248,7 +271,7 @@ export const getCurrentUser = async () => {
         id: firebaseUser.uid,
         email: firebaseUser.email,
         name: firebaseUser.displayName || firebaseUser.email,
-        role: isAdminEmail(firebaseUser.email) ? 'admin' : 'user',
+        role: 'user',
         banned: false,
         createdAt: new Date().toISOString(),
       };
@@ -257,10 +280,6 @@ export const getCurrentUser = async () => {
       return userData;
     }
     const userData = { id: userDoc.id, ...userDoc.data() };
-    if (isAdminEmail(userData.email) && userData.role !== 'admin') {
-      userData.role = 'admin';
-      await update(COLLECTIONS.users, firebaseUser.uid, { role: 'admin' });
-    }
     localCurrentUser = userData;
     return userData;
   } catch (error) {
@@ -272,8 +291,9 @@ export const updateCurrentUser = async (updates) => {
   try {
     const user = await getCurrentUser();
     if (!user) return null;
-    const updatedUser = { ...user, ...updates };
-    await update(COLLECTIONS.users, user.id, updates);
+    const { password, ...safeUpdates } = updates;
+    const updatedUser = { ...user, ...safeUpdates };
+    await update(COLLECTIONS.users, user.id, safeUpdates);
     localCurrentUser = updatedUser;
     return updatedUser;
   } catch (error) {
@@ -281,12 +301,84 @@ export const updateCurrentUser = async (updates) => {
   }
 };
 
+export const changePassword = async (currentPassword, newPassword) => {
+  try {
+    const user = auth.currentUser;
+    if (!user) return { success: false, error: 'Not logged in' };
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+    return { success: true };
+  } catch (error) {
+    if (error.code === 'auth/wrong-password') {
+      return { success: false, error: 'Current password is incorrect' };
+    }
+    return { success: false, error: 'Failed to change password' };
+  }
+};
+
+export const resetPassword = async (email) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    return { success: true };
+  } catch (error) {
+    if (error.code === 'auth/user-not-found') {
+      return { success: false, error: 'No account found with this email' };
+    }
+    return { success: false, error: 'Failed to send reset email' };
+  }
+};
+
+export const sendVerificationEmail = async () => {
+  try {
+    const user = auth.currentUser;
+    if (!user) return { success: false, error: 'Not logged in' };
+    await sendEmailVerification(user);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: 'Failed to send verification email' };
+  }
+};
+
+export const checkEmailVerified = async () => {
+  try {
+    const user = auth.currentUser;
+    if (!user) return false;
+    await reload(user);
+    return user.emailVerified;
+  } catch (error) {
+    return false;
+  }
+};
+
+const checkAdminAccess = async () => {
+  const user = localCurrentUser || await getCurrentUser();
+  if (!user || user.role !== 'admin') return false;
+  return true;
+};
+
 export const getAllUsers = async () => {
   try {
+    if (!(await checkAdminAccess())) return [];
     const snapshot = await getAllDocs(COLLECTIONS.users);
-    return await fetchAllDocs(snapshot);
+    const users = await fetchAllDocs(snapshot);
+    return users;
   } catch (error) {
     return [];
+  }
+};
+
+export const onUsersSnapshot = (callback) => {
+  try {
+    if (auth.currentUser === null) { callback([]); return () => {}; }
+    return onSnapshot(col(COLLECTIONS.users), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      callback(docs);
+    }, (error) => {
+      callback([]);
+    });
+  } catch (e) {
+    return () => {};
   }
 };
 
@@ -452,6 +544,16 @@ export const getServiceProvidersByCategory = async (categoryName) => {
   }
 };
 
+export const getProviderByOwnerId = async (ownerId) => {
+  try {
+    const snapshot = await queryWhere(COLLECTIONS.providers, 'ownerId', '==', ownerId);
+    const results = await fetchAllDocs(snapshot);
+    return results.length > 0 ? results[0] : null;
+  } catch (error) {
+    return null;
+  }
+};
+
 export const addServiceProvider = async (provider) => {
   try {
     const id = provider.id || 'prov_' + Date.now();
@@ -586,6 +688,15 @@ export const getReviews = async (serviceId) => {
   }
 };
 
+export const replyToReview = async (reviewId, replyText) => {
+  try {
+    await update(COLLECTIONS.reviews, reviewId, { reply: replyText });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 export const getBusinessReviews = getReviews;
 
 export const getAllReviews = async () => {
@@ -624,6 +735,22 @@ export const createBooking = async (booking) => {
         timestamp: new Date().toISOString(),
         read: false,
       });
+    }
+    const providerSnap = await get(COLLECTIONS.providers, booking.businessId);
+    if (providerSnap.exists()) {
+      const provider = providerSnap.data();
+      if (provider.ownerId && !adminIds.includes(provider.ownerId)) {
+        await addNotification({
+          id: 'notif_' + Date.now() + '_prov_' + provider.ownerId.slice(0, 4),
+          userId: provider.ownerId,
+          type: 'new_booking',
+          title: 'New Booking',
+          message: `${booking.userName} booked your service for ${booking.date} at ${booking.time}`,
+          bookingId: id,
+          timestamp: new Date().toISOString(),
+          read: false,
+        });
+      }
     }
     return true;
   } catch (error) {
@@ -683,6 +810,30 @@ export const updateBookingStatus = async (bookingId, status) => {
         timestamp: new Date().toISOString(),
         read: false,
       });
+      const providerSnap = await get(COLLECTIONS.providers, booking.businessId);
+      if (providerSnap.exists()) {
+        const provider = providerSnap.data();
+        if (provider.ownerId && provider.ownerId !== booking.userId) {
+          const providerStatusMessages = {
+            approved: `${booking.userName}'s booking has been approved.`,
+            rejected: `${booking.userName}'s booking has been rejected.`,
+            completed: `${booking.userName}'s booking has been completed.`,
+            cancelled: `${booking.userName}'s booking has been cancelled.`,
+          };
+          if (providerStatusMessages[status]) {
+            await addNotification({
+              id: 'notif_' + Date.now() + '_prov',
+              userId: provider.ownerId,
+              type: 'booking_update',
+              title: `Booking ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+              message: providerStatusMessages[status],
+              bookingId: booking.id,
+              timestamp: new Date().toISOString(),
+              read: false,
+            });
+          }
+        }
+      }
     }
     return true;
   } catch (error) {
@@ -708,7 +859,29 @@ export const sendMessage = async (message) => {
     const rateCheck = await checkRateLimit(message.senderId, COLLECTIONS.messages);
     if (!rateCheck.allowed) return { success: false, error: rateCheck.message };
     const id = message.id || 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-    await set(COLLECTIONS.messages, id, { ...message, id });
+    const participants = [message.senderId, message.receiverId].filter(Boolean);
+    let receiverId = message.receiverId;
+    if (receiverId === 'admin') {
+      const adminIds = await getAdminUserIds();
+      receiverId = adminIds.length > 0 ? adminIds[0] : null;
+      if (!receiverId) return true;
+    }
+    const doc = { ...message, id, receiverId, participants };
+    await set(COLLECTIONS.messages, id, doc);
+    try {
+      const notifId = 'notif_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      await set(COLLECTIONS.notifications, notifId, {
+        id: notifId,
+        userId: receiverId,
+        type: 'message',
+        title: message.senderName || 'New Message',
+        body: message.text?.substring(0, 100) || 'Sent a message',
+        senderId: message.senderId,
+        senderName: message.senderName,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (e) {}
     return true;
   } catch (error) {
     return false;
@@ -787,14 +960,15 @@ export const getConversationsForAdmin = async (adminId) => {
   return buildConversations(adminId, 'admin');
 };
 
-export const markMessagesRead = async (senderId, receiverId) => {
+export const markMessagesRead = async (otherUserId, myUserId) => {
   try {
     const q = query(col(COLLECTIONS.messages),
-      where('senderId', '==', senderId),
-      where('receiverId', '==', receiverId),
+      where('senderId', '==', otherUserId),
+      where('receiverId', '==', myUserId),
       where('read', '==', false)
     );
     const snapshot = await getDocs(q);
+    if (snapshot.empty) return true;
     const batch = writeBatch(db);
     snapshot.forEach((d) => batch.update(d.ref, { read: true }));
     await batch.commit();
@@ -960,6 +1134,26 @@ export const addCommunityPost = async (post) => {
     if (!rateCheck.allowed) return { success: false, error: rateCheck.message };
     const id = post.id || 'post_' + Date.now();
     await set(COLLECTIONS.posts, id, { ...post, id });
+    if (post.category === 'News') {
+      try {
+        const users = await getAllUsers();
+        for (const u of users) {
+          if (u.id !== post.userId) {
+            await addNotification({
+              userId: u.id,
+              type: 'news',
+              title: 'News Update',
+              message: post.title || 'New announcement from admin',
+              postId: id,
+              senderId: post.userId,
+              senderName: post.userName,
+              read: false,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (e) {}
+    }
     return true;
   } catch (error) {
     return false;
@@ -967,6 +1161,32 @@ export const addCommunityPost = async (post) => {
 };
 
 export const createPost = addCommunityPost;
+
+export const uploadCommunityImage = async (postId, uri) => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const imageRef = storageRef(storage, `community-images/${postId}.jpg`);
+    await uploadBytes(imageRef, blob);
+    const url = await getDownloadURL(imageRef);
+    return url;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const uploadImage = async (path, uri) => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const imageRef = storageRef(storage, path);
+    await uploadBytes(imageRef, blob);
+    const url = await getDownloadURL(imageRef);
+    return url;
+  } catch (error) {
+    return null;
+  }
+};
 
 export const getCommunityPosts = async () => {
   try {
@@ -992,33 +1212,77 @@ export const deletePost = deleteCommunityPost;
 
 export const addPostComment = async (postId, comment) => {
   try {
-    const snap = await get(COLLECTIONS.posts, postId);
-    if (!snap.exists()) return false;
-    const post = snap.data();
-    const comments = post.comments || [];
-    comments.push(comment);
-    await update(COLLECTIONS.posts, postId, { comments });
+    const commentsRef = collection(db, 'posts', postId, 'comments');
+    await add(commentsRef, comment);
+    const postSnap = await getDoc(doc(db, 'posts', postId));
+    if (postSnap.exists()) {
+      const post = postSnap.data();
+      const count = (post.commentCount || 0) + 1;
+      await updateDoc(doc(db, 'posts', postId), { commentCount: count });
+      if (post.userId && post.userId !== comment.userId) {
+        await addNotification({
+          userId: post.userId,
+          type: 'post_comment',
+          title: 'New Comment',
+          message: `${comment.userName} commented on your post`,
+          postId,
+          senderId: comment.userId,
+          senderName: comment.userName,
+          read: false,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
     return true;
   } catch (error) {
     return false;
   }
 };
 
+export const onPostCommentsSnapshot = (postId, callback) => {
+  try {
+    const commentsRef = collection(db, 'posts', postId, 'comments');
+    return onSnapshot(commentsRef, (snap) => {
+      const comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      comments.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      callback(comments);
+    }, (error) => {
+      callback([]);
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
 export const addComment = addPostComment;
 
-export const togglePostLike = async (postId, userId) => {
+export const togglePostLike = async (postId, userId, userName) => {
   try {
     const snap = await get(COLLECTIONS.posts, postId);
     if (!snap.exists()) return false;
     const post = snap.data();
     const likes = post.likes || [];
     const idx = likes.indexOf(userId);
-    if (idx > -1) {
-      likes.splice(idx, 1);
-    } else {
+    const isLiking = idx === -1;
+    if (isLiking) {
       likes.push(userId);
+    } else {
+      likes.splice(idx, 1);
     }
     await update(COLLECTIONS.posts, postId, { likes });
+    if (isLiking && post.userId && post.userId !== userId) {
+      await addNotification({
+        userId: post.userId,
+        type: 'post_like',
+        title: 'New Like',
+        message: `${userName || 'Someone'} liked your post`,
+        postId,
+        senderId: userId,
+        senderName: userName,
+        read: false,
+        timestamp: new Date().toISOString(),
+      });
+    }
     return true;
   } catch (error) {
     return false;
@@ -1114,7 +1378,52 @@ export const getAdminAnalytics = async () => {
       pendingBookings: bookings.filter((b) => b.status === 'pending').length,
     };
   } catch (error) {
-    return { totalUsers: 0, totalBookings: 0, weekBookings: 0, completedBookings: 0, totalReviews: 0, avgRating: 0, totalBusinesses: 0, totalProviders: 0, pendingBookings: 0 };
+    return {
+      totalUsers: 0,
+      totalBookings: 0,
+      weekBookings: 0,
+      completedBookings: 0,
+      totalReviews: 0,
+      avgRating: 0,
+      totalBusinesses: 0,
+      totalProviders: 0,
+      pendingBookings: 0,
+    };
+  }
+};
+
+export const onAdminAnalyticsSnapshot = (callback) => {
+  try {
+    const state = { users: [], bookings: [], reviews: [], businesses: 0, providers: 0 };
+    const compute = () => {
+      const thisWeek = new Date();
+      thisWeek.setDate(thisWeek.getDate() - 7);
+      const weekBookings = state.bookings.filter((b) => new Date(b.createdAt) > thisWeek);
+      const completedBookings = state.bookings.filter((b) => b.status === 'completed');
+      const pendingBookings = state.bookings.filter((b) => b.status === 'pending');
+      const avgRating = state.reviews.length > 0
+        ? state.reviews.reduce((sum, r) => sum + r.rating, 0) / state.reviews.length
+        : 0;
+      callback({
+        totalUsers: state.users.length,
+        totalBookings: state.bookings.length,
+        weekBookings: weekBookings.length,
+        completedBookings: completedBookings.length,
+        totalReviews: state.reviews.length,
+        avgRating: Math.round(avgRating * 10) / 10,
+        totalBusinesses: state.businesses,
+        totalProviders: state.providers,
+        pendingBookings: pendingBookings.length,
+      });
+    };
+    const unsub1 = onSnapshot(col(COLLECTIONS.users), (snap) => { state.users = snap.docs.map(d => d.data()); compute(); }, () => {});
+    const unsub2 = onSnapshot(col(COLLECTIONS.bookings), (snap) => { state.bookings = snap.docs.map(d => d.data()); compute(); }, () => {});
+    const unsub3 = onSnapshot(col(COLLECTIONS.reviews), (snap) => { state.reviews = snap.docs.map(d => d.data()); compute(); }, () => {});
+    const unsub4 = onSnapshot(col(COLLECTIONS.businesses), (snap) => { state.businesses = snap.size; compute(); }, () => {});
+    const unsub5 = onSnapshot(col(COLLECTIONS.providers), (snap) => { state.providers = snap.size; compute(); }, () => {});
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
+  } catch (e) {
+    return () => {};
   }
 };
 
@@ -1326,9 +1635,16 @@ export const getRecommendedProviders = async (userId) => {
 
 export const onBookingsSnapshot = (callback) => {
   try {
-    const q = query(col(COLLECTIONS.bookings), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    return onSnapshot(col(COLLECTIONS.bookings), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs.sort((a, b) => {
+        const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+        const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        return tb - ta;
+      });
+      callback(docs);
+    }, (error) => {
+      callback([]);
     });
   } catch (e) {
     return () => {};
@@ -1354,11 +1670,15 @@ export const onNotificationsSnapshot = (userId, callback) => {
   try {
     const q = query(col(COLLECTIONS.notifications), where('userId', '==', userId));
     return onSnapshot(q, (snap) => {
-      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+      const notifs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      notifs.sort((a, b) => {
         const ta = a.timestamp ? new Date(a.timestamp).getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
         const tb = b.timestamp ? new Date(b.timestamp).getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
         return tb - ta;
-      }));
+      });
+      callback(notifs.slice(0, 50));
+    }, (error) => {
+      callback([]);
     });
   } catch (e) {
     return () => {};
@@ -1367,40 +1687,66 @@ export const onNotificationsSnapshot = (userId, callback) => {
 
 export const onMessagesSnapshot = (userId, otherUserId, callback) => {
   try {
-    const q = query(
-      col(COLLECTIONS.messages),
-      where('participants', 'array-contains', userId)
-    );
-    return onSnapshot(q, (snap) => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
-        const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
-        const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
-        return ta - tb;
-      });
-      const filtered = otherUserId
-        ? all.filter(m => m.senderId === otherUserId || m.receiverId === otherUserId)
-        : all;
-      callback(filtered);
-    });
+    const q1 = query(col(COLLECTIONS.messages), where('senderId', '==', userId), where('receiverId', '==', otherUserId));
+    const q2 = query(col(COLLECTIONS.messages), where('senderId', '==', otherUserId), where('receiverId', '==', userId));
+    let msgs1 = [];
+    let msgs2 = [];
+    const emit = () => {
+      const all = [...msgs1, ...msgs2].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      callback(all);
+    };
+    const unsub1 = onSnapshot(q1, (snap) => { msgs1 = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit(); }, () => {});
+    const unsub2 = onSnapshot(q2, (snap) => { msgs2 = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit(); }, () => {});
+    return () => { unsub1(); unsub2(); };
   } catch (e) {
     return () => {};
   }
 };
 
-export const onConversationsSnapshot = (userId, callback) => {
+export const onConversationsSnapshot = (userId, callback, filterType = null) => {
   try {
-    const q = query(col(COLLECTIONS.messages), where('participants', 'array-contains', userId));
-    return onSnapshot(q, (snap) => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const q1 = query(col(COLLECTIONS.messages), where('senderId', '==', userId));
+    const q2 = query(col(COLLECTIONS.messages), where('receiverId', '==', userId));
+    let msgs1 = [];
+    let msgs2 = [];
+    const process = () => {
+      const all = [...msgs1, ...msgs2];
       const convMap = {};
       all.forEach(m => {
+        if (filterType && m.conversationType !== filterType) return;
         const otherId = m.senderId === userId ? m.receiverId : m.senderId;
-        if (!convMap[otherId] || new Date(m.createdAt) > new Date(convMap[otherId].createdAt)) {
-          convMap[otherId] = m;
+        const otherName = m.senderId === userId ? m.receiverName : m.senderName;
+        const type = m.conversationType || 'business';
+        if (!convMap[otherId]) {
+          convMap[otherId] = {
+            otherId,
+            otherName,
+            conversationType: type,
+            businessId: m.businessId,
+            businessName: m.businessName,
+            lastMessage: m,
+            unread: 0,
+            lastTimestamp: new Date(m.timestamp || 0),
+          };
+        } else {
+          if (new Date(m.timestamp) > convMap[otherId].lastTimestamp) {
+            convMap[otherId].lastMessage = m;
+            convMap[otherId].lastTimestamp = new Date(m.timestamp);
+            convMap[otherId].otherName = otherName;
+          }
+        }
+        if (m.receiverId === userId && !m.read) {
+          convMap[otherId].unread = (convMap[otherId].unread || 0) + 1;
         }
       });
-      callback(Object.entries(convMap).map(([uid, msg]) => ({ userId: uid, lastMessage: msg })));
-    });
+      const result = Object.values(convMap).sort(
+        (a, b) => b.lastTimestamp - a.lastTimestamp
+      );
+      callback(result);
+    };
+    const unsub1 = onSnapshot(q1, (snap) => { msgs1 = snap.docs.map(d => ({ id: d.id, ...d.data() })); process(); }, () => {});
+    const unsub2 = onSnapshot(q2, (snap) => { msgs2 = snap.docs.map(d => ({ id: d.id, ...d.data() })); process(); }, () => {});
+    return () => { unsub1(); unsub2(); };
   } catch (e) {
     return () => {};
   }
@@ -1408,9 +1754,12 @@ export const onConversationsSnapshot = (userId, callback) => {
 
 export const onPostsSnapshot = (callback) => {
   try {
-    const q = query(col(COLLECTIONS.posts), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    return onSnapshot(col(COLLECTIONS.posts), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      callback(docs);
+    }, (error) => {
+      callback([]);
     });
   } catch (e) {
     return () => {};
@@ -1422,6 +1771,18 @@ export const onProvidersSnapshot = (callback) => {
     return onSnapshot(col(COLLECTIONS.providers), (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onProviderSnapshot = (providerId, callback) => {
+  try {
+    return onSnapshot(doc(db, COLLECTIONS.providers, providerId), (snap) => {
+      if (snap.exists()) {
+        callback({ id: snap.id, ...snap.data() });
+      }
+    }, (error) => {});
   } catch (e) {
     return () => {};
   }
@@ -1452,17 +1813,194 @@ export const onBusinessesSnapshot = (callback) => {
   }
 };
 
-export const onReviewsSnapshot = (businessId, callback) => {
+export const onReviewsSnapshot = (serviceId, callback) => {
   try {
-    const q = query(col(COLLECTIONS.reviews), where('businessId', '==', businessId));
+    const q = query(col(COLLECTIONS.reviews), where('serviceId', '==', serviceId));
     return onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
         const ta = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
         const tb = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
         return tb - ta;
       }));
+    }, (error) => {
     });
   } catch (e) {
     return () => {};
+  }
+};
+
+export const setUserOnlineStatus = async (userId, isOnline) => {
+  try {
+    await set(COLLECTIONS.presence, userId, {
+      userId,
+      isOnline,
+      lastSeen: new Date().toISOString(),
+    });
+  } catch (e) {}
+};
+
+export const onUserStatusSnapshot = (userId, callback) => {
+  try {
+    return onSnapshot(ref(COLLECTIONS.presence, userId), (doc) => {
+      if (doc.exists()) {
+        callback(doc.data());
+      } else {
+        callback({ isOnline: false });
+      }
+    }, (error) => {
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+// ============ FOLLOWS / CONNECTIONS ============
+const followDocId = (followerId, targetId) => `${followerId}_${targetId}`;
+
+export const isFollowing = async (followerId, targetId) => {
+  try {
+    if (!followerId || !targetId) return false;
+    const snap = await get(COLLECTIONS.follows, followDocId(followerId, targetId));
+    return snap.exists();
+  } catch (error) {
+    return false;
+  }
+};
+
+export const toggleFollow = async (followerId, targetId, targetType = 'user') => {
+  try {
+    if (!followerId || !targetId) return false;
+    if (followerId === targetId) return false;
+    const docId = followDocId(followerId, targetId);
+    const snap = await get(COLLECTIONS.follows, docId);
+    if (snap.exists()) {
+      await remove(COLLECTIONS.follows, docId);
+      return false;
+    }
+    await set(COLLECTIONS.follows, docId, {
+      followerId,
+      targetId,
+      targetType,
+      createdAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const follow = async (followerId, targetId, targetType = 'user') => {
+  try {
+    if (!followerId || !targetId) return false;
+    const docId = followDocId(followerId, targetId);
+    const snap = await get(COLLECTIONS.follows, docId);
+    if (snap.exists()) return true;
+    await set(COLLECTIONS.follows, docId, {
+      followerId,
+      targetId,
+      targetType,
+      createdAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const unfollow = async (followerId, targetId) => {
+  try {
+    if (!followerId || !targetId) return false;
+    await remove(COLLECTIONS.follows, followDocId(followerId, targetId));
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const getFollowersCount = async (targetId) => {
+  try {
+    const snapshot = await queryWhere(COLLECTIONS.follows, 'targetId', '==', targetId);
+    return snapshot.size;
+  } catch (error) {
+    return 0;
+  }
+};
+
+export const getFollowingCount = async (userId) => {
+  try {
+    const snapshot = await queryWhere(COLLECTIONS.follows, 'followerId', '==', userId);
+    return snapshot.size;
+  } catch (error) {
+    return 0;
+  }
+};
+
+export const getUserFollowerIds = async (targetId) => {
+  try {
+    const snapshot = await queryWhere(COLLECTIONS.follows, 'targetId', '==', targetId);
+    return snapshot.docs.map((d) => d.data().followerId);
+  } catch (error) {
+    return [];
+  }
+};
+
+export const onFollowersSnapshot = (targetId, callback) => {
+  try {
+    if (!targetId) { callback(0); return () => {}; }
+    return onSnapshot(query(col(COLLECTIONS.follows), where('targetId', '==', targetId)), (snap) => {
+      callback(snap.size);
+    }, (error) => {
+      callback(0);
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const onUserFollowsSnapshot = (userId, callback) => {
+  try {
+    if (!userId) { callback([]); return () => {}; }
+    return onSnapshot(query(col(COLLECTIONS.follows), where('followerId', '==', userId)), (snap) => {
+      const ids = snap.docs.map((d) => d.data().targetId);
+      callback(ids);
+    }, (error) => {
+      callback([]);
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+// ============ PROVIDER SKILLS / ENDORSEMENTS ============
+export const endorseSkill = async (providerId, skillName) => {
+  try {
+    const snap = await get(COLLECTIONS.providers, providerId);
+    if (!snap.exists()) return false;
+    const data = snap.data();
+    const skills = Array.isArray(data.skills) ? data.skills : [];
+    const idx = skills.findIndex((s) => (typeof s === 'string' ? s === skillName : s.name === skillName));
+    if (idx === -1) {
+      skills.push({ name: skillName, endorsements: 1 });
+    } else {
+      const current = typeof skills[idx] === 'string'
+        ? { name: skills[idx], endorsements: 1 }
+        : { ...skills[idx], endorsements: (skills[idx].endorsements || 0) + 1 };
+      skills[idx] = current;
+    }
+    await update(COLLECTIONS.providers, providerId, { skills });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const updateProviderSkills = async (providerId, skills) => {
+  try {
+    const snap = await get(COLLECTIONS.providers, providerId);
+    if (!snap.exists()) return false;
+    await update(COLLECTIONS.providers, providerId, { skills: Array.isArray(skills) ? skills : [] });
+    return true;
+  } catch (error) {
+    return false;
   }
 };

@@ -15,7 +15,7 @@ import { createStyleSheet } from '../utils/responsive';
 
 export default function AboutScreen() {
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   return (
     <SafeAreaView style={styles.container}>

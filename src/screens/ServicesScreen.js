@@ -22,12 +22,15 @@ import {
   addServiceProvider,
   deleteServiceProvider,
   updateServiceProvider,
+  uploadImage,
   getCurrentUser,
   onProvidersSnapshot,
 } from '../data/firebaseStorage';
 import { getCategories } from '../data/services';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { hapticLight, hapticMedium, hapticWarning } from '../utils/haptics';
+import { ServicesSkeleton } from '../components/Skeleton';
 import { createStyleSheet } from '../utils/responsive';
 
 const DEFAULT_IMAGES = {
@@ -46,6 +49,7 @@ const DEFAULT_IMAGES = {
 
 export default function ServicesScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const toast = useToast();
   const { categoryName } = route.params;
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('rating');
@@ -60,6 +64,7 @@ export default function ServicesScreen({ route, navigation }) {
   const [newServicesText, setNewServicesText] = useState('');
   const [newImage, setNewImage] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const category = categories.find((c) => c.name === categoryName);
   const isAdmin = user?.role === 'admin';
@@ -469,7 +474,7 @@ export default function ServicesScreen({ route, navigation }) {
     },
   });
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   useEffect(() => {
     const unsubscribe = onProvidersSnapshot((allProviders) => {
@@ -481,6 +486,7 @@ export default function ServicesScreen({ route, navigation }) {
       setCategories(cats);
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+      setLoading(false);
     })();
     return () => unsubscribe();
   }, [categoryName]);
@@ -508,14 +514,15 @@ export default function ServicesScreen({ route, navigation }) {
 
   const handleAddProvider = async () => {
     if (!newName.trim()) {
-      Alert.alert('Error', 'Name is required');
+      toast.error('Name is required');
       return;
     }
     if (!newPhone.trim()) {
-      Alert.alert('Error', 'Phone is required');
+      toast.error('Phone is required');
       return;
     }
 
+    const user = await getCurrentUser();
     const servicesList = newServicesText
       .split(',')
       .map((s) => s.trim())
@@ -534,13 +541,14 @@ export default function ServicesScreen({ route, navigation }) {
       reviews: 0,
       image: newImage || DEFAULT_IMAGES[categoryName] || category?.image || 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=400',
       isUserRegistered: false,
+      ownerId: user?.id || null,
       createdAt: new Date().toISOString(),
     };
 
     await addServiceProvider(provider);
     setShowAddModal(false);
     resetAddForm();
-    Alert.alert('Added', `"${provider.name}" has been added to ${categoryName}`);
+    toast.success('Provider added');
   };
 
   const handleDelete = (item) => {
@@ -559,7 +567,7 @@ export default function ServicesScreen({ route, navigation }) {
   const handleChangePhoto = async (item) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Please grant camera roll access to change the photo.');
+      toast.error('Camera roll access needed');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -567,7 +575,11 @@ export default function ServicesScreen({ route, navigation }) {
       quality: 0.7,
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      await updateServiceProvider(item.id, { image: result.assets[0].uri });
+      const localUri = result.assets[0].uri;
+      const url = await uploadImage(`provider-images/${item.id}.jpg`, localUri);
+      if (url) {
+        await updateServiceProvider(item.id, { image: url });
+      }
     }
   };
 
@@ -584,7 +596,7 @@ export default function ServicesScreen({ route, navigation }) {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Please grant camera roll access to add photos.');
+      toast.error('Camera roll access needed');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -682,7 +694,17 @@ export default function ServicesScreen({ route, navigation }) {
         )}
       </View>
     </AnimatedCard>
-  );  return (
+  );
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <ServicesSkeleton />
+      </View>
+    );
+  }
+
+  return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colors.statusBar} />
 
@@ -731,6 +753,7 @@ export default function ServicesScreen({ route, navigation }) {
           placeholderTextColor={colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          maxLength={100}
           accessibilityLabel={`Search ${categoryName} providers`}
         />
         {searchQuery.length > 0 && (
@@ -844,6 +867,7 @@ export default function ServicesScreen({ route, navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={newName}
                   onChangeText={setNewName}
+                  maxLength={50}
                   accessibilityLabel="Business name"
                 />
               </View>
@@ -859,6 +883,7 @@ export default function ServicesScreen({ route, navigation }) {
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
+                  maxLength={500}
                   accessibilityLabel="Description"
                 />
               </View>
@@ -892,6 +917,7 @@ export default function ServicesScreen({ route, navigation }) {
                   value={newPhone}
                   onChangeText={setNewPhone}
                   keyboardType="phone-pad"
+                  maxLength={15}
                   accessibilityLabel="Phone number"
                 />
               </View>
@@ -904,6 +930,7 @@ export default function ServicesScreen({ route, navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={newAddress}
                   onChangeText={setNewAddress}
+                  maxLength={100}
                   accessibilityLabel="Address"
                 />
               </View>
@@ -916,6 +943,7 @@ export default function ServicesScreen({ route, navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={newHours}
                   onChangeText={setNewHours}
+                  maxLength={50}
                   accessibilityLabel="Working hours"
                 />
               </View>
@@ -928,6 +956,7 @@ export default function ServicesScreen({ route, navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={newServicesText}
                   onChangeText={setNewServicesText}
+                  maxLength={200}
                   accessibilityLabel="Services offered"
                 />
               </View>

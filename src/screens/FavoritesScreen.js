@@ -29,7 +29,7 @@ import { createStyleSheet } from '../utils/responsive';
 
 export default function FavoritesScreen({ navigation }) {
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const [favorites, setFavorites] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);

@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   FlatList,
   SafeAreaView,
@@ -18,12 +17,15 @@ import {
   Animated,
   LayoutAnimation,
   UIManager,
+  Image,
+  Share,
 } from 'react-native';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import {
   addCommunityPost,
   deleteCommunityPost,
@@ -31,9 +33,16 @@ import {
   addPostComment,
   getCurrentUser,
   onPostsSnapshot,
+  onPostCommentsSnapshot,
+  uploadCommunityImage,
+  toggleFollow,
+  onUserFollowsSnapshot,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../utils/haptics';
+import { useNetworkAction } from '../utils/useNetworkAction';
+import { CommunitySkeleton } from '../components/Skeleton';
 import { createStyleSheet } from '../utils/responsive';
 
 const POST_CATEGORIES = [
@@ -111,7 +120,9 @@ function getTimeAgo(timestamp) {
 
 export default function CommunityScreen({ navigation }) {
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const toast = useToast();
+  const { run } = useNetworkAction();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const [posts, setPosts] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -127,6 +138,10 @@ export default function CommunityScreen({ navigation }) {
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [filterCategory, setFilterCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
+  const [postComments, setPostComments] = useState([]);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [followingIds, setFollowingIds] = useState(new Set());
   const emptyOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -135,6 +150,22 @@ export default function CommunityScreen({ navigation }) {
 
   const animateList = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      toast.error('Camera roll access needed to add photos');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setSelectedImage(result.assets[0].uri);
+    }
   };
 
   useEffect(() => {
@@ -148,8 +179,16 @@ export default function CommunityScreen({ navigation }) {
     });
     getCurrentUser().then((currentUser) => {
       setUser(currentUser);
+      const followsUnsub = onUserFollowsSnapshot(currentUser?.id, (ids) => {
+        setFollowingIds(new Set(ids));
+      });
+      followsUnsubRef.current = followsUnsub;
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (commentsUnsubRef.current) commentsUnsubRef.current();
+      if (followsUnsubRef.current) followsUnsubRef.current();
+    };
   }, []);
 
   const onRefresh = async () => {
@@ -157,53 +196,52 @@ export default function CommunityScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const handleCreatePost = async () => {
-    if (!newTitle.trim()) {
-      Alert.alert('Missing Title', 'Please enter a title for your post.');
-      return;
-    }
+  const handleCreatePost = () => run(async () => {
     if (!newDescription.trim()) {
-      Alert.alert('Missing Description', 'Please enter a description.');
+      toast.error('Please enter a description');
       return;
     }
     if (!user) {
-      Alert.alert('Not Logged In', 'Please log in to create a post.');
+      toast.error('Please log in to create a post');
       return;
     }
     if (newCategory === 'News' && user.role !== 'admin') {
-      Alert.alert('Not Allowed', 'Only admins can post News.');
+      toast.error('Only admins can post News');
       return;
     }
 
-    setPosting(true);
-    try {
-      const post = {
-        id: 'post_' + Date.now(),
-        userId: user.id,
-        userName: user.name,
-        title: sanitize(newTitle),
-        description: sanitize(newDescription),
-        category: newCategory,
-        likes: [],
-        comments: [],
-        createdAt: new Date().toISOString(),
-      };
-      const result = await addCommunityPost(post);
-      if (result === true || result?.success !== false) {
-        hapticSuccess();
-        setNewTitle('');
-        setNewDescription('');
-        setNewCategory('General');
-        setCreateModalVisible(false);
-      } else {
-        Alert.alert('Error', result?.error || 'Failed to create post. Please try again.');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create post. Please try again.');
-    } finally {
-      setPosting(false);
+    const postId = 'post_' + Date.now();
+    let imageUrl = null;
+    if (selectedImage) {
+      imageUrl = await uploadCommunityImage(postId, selectedImage);
     }
-  };
+    const post = {
+      id: postId,
+      userId: user.id,
+      userName: user.name,
+      userHeadline: user.headline || '',
+      userRole: user.role,
+      title: newTitle.trim() || newDescription.trim().substring(0, 60),
+      description: sanitize(newDescription),
+      category: newCategory,
+      imageUrl,
+      likes: [],
+      commentCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+    const result = await addCommunityPost(post);
+    if (result === true || result?.success !== false) {
+      hapticSuccess();
+      setNewTitle('');
+      setNewDescription('');
+      setNewCategory('General');
+      setSelectedImage(null);
+      setCreateModalVisible(false);
+      toast.success('Post created!');
+    } else {
+      toast.error(result?.error || 'Failed to create post');
+    }
+  });
 
   const handleDeletePost = (post) => {
     Alert.alert(
@@ -224,44 +262,118 @@ export default function CommunityScreen({ navigation }) {
     );
   };
 
-  const handleLike = async (postId) => {
+  const handleLike = (postId) => run(async () => {
     if (!user) {
-      Alert.alert('Not Logged In', 'Please log in to like posts.');
+      toast.error('Please log in to like posts');
       return;
     }
     hapticLight();
-    await togglePostLike(postId, user.id);
+    await togglePostLike(postId, user.id, user.name);
+  });
+
+  const handleFollow = (targetId) => run(async () => {
+    if (!user) {
+      toast.error('Please log in to follow others');
+      return;
+    }
+    if (targetId === user.id) return;
+    hapticLight();
+    const nowFollowing = await toggleFollow(user.id, targetId, 'user');
+    toast.success(nowFollowing ? 'Now following' : 'Unfollowed');
+  });
+
+  const handleRepost = (post) => {
+    if (!user) {
+      toast.error('Please log in to repost');
+      return;
+    }
+    Alert.alert('Repost', `Share "${post.title}" with your network?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Repost',
+        onPress: () => run(async () => {
+          hapticLight();
+          const postId = 'post_' + Date.now();
+          const repost = {
+            id: postId,
+            userId: user.id,
+            userName: user.name,
+            userHeadline: user.headline || '',
+            userRole: user.role,
+            title: post.title,
+            description: post.description,
+            category: post.category,
+            imageUrl: post.imageUrl,
+            likes: [],
+            commentCount: 0,
+            reposted: true,
+            originalPostId: post.id,
+            originalAuthor: post.userName,
+            originalAuthorId: post.userId,
+            originalAuthorHeadline: post.userHeadline || '',
+            originalCreatedAt: post.createdAt,
+            createdAt: new Date().toISOString(),
+          };
+          await addCommunityPost(repost);
+          hapticSuccess();
+          toast.success('Reposted!');
+        }),
+      },
+    ]);
   };
 
-  const handleAddComment = async () => {
+  const handleNativeShare = (post) => {
+    Share.share({
+      message: `${post.title}\n\n${post.description || ''}\n\nShared from Nadma Community by ${post.userName}`,
+      title: 'Nadma Community',
+    }).catch(() => {});
+  };
+
+  const handleAddComment = () => run(async () => {
     if (!newComment.trim()) return;
     if (!user) {
-      Alert.alert('Not Logged In', 'Please log in to comment.');
+      toast.error('Please log in to comment');
       return;
     }
 
-    setCommenting(true);
-    try {
-      const comment = {
-        id: 'comment_' + Date.now(),
-        userId: user.id,
-        userName: user.name,
-        text: newComment.trim(),
-        createdAt: new Date().toISOString(),
-      };
-      await addPostComment(selectedPost.id, comment);
+    const commentText = newComment.trim();
+    setNewComment('');
+    const comment = {
+      userId: user.id,
+      userName: user.name,
+      text: commentText,
+      createdAt: new Date().toISOString(),
+    };
+    const success = await addPostComment(selectedPost.id, comment);
+    if (!success) {
+      setNewComment(commentText);
+      toast.error('Failed to add comment');
+    } else {
       hapticMedium();
-      setNewComment('');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to add comment.');
-    } finally {
-      setCommenting(false);
     }
-  };
+  });
+
+  const commentsUnsubRef = useRef(null);
+  const followsUnsubRef = useRef(null);
 
   const openComments = (post) => {
     setSelectedPost(post);
     setCommentsModalVisible(true);
+    setPostComments([]);
+    if (commentsUnsubRef.current) commentsUnsubRef.current();
+    commentsUnsubRef.current = onPostCommentsSnapshot(post.id, (comments) => {
+      setPostComments(comments);
+    });
+  };
+
+  const closeComments = () => {
+    setCommentsModalVisible(false);
+    if (commentsUnsubRef.current) {
+      commentsUnsubRef.current();
+      commentsUnsubRef.current = null;
+    }
+    setSelectedPost(null);
+    setPostComments([]);
   };
 
   const filteredPosts = posts.filter((p) => {
@@ -280,13 +392,23 @@ export default function CommunityScreen({ navigation }) {
   const renderPost = ({ item }) => {
     const isLiked = user && item.likes && item.likes.includes(user.id);
     const likeCount = item.likes ? item.likes.length : 0;
-    const commentCount = item.comments ? item.comments.length : 0;
+    const commentCount = item.commentCount || 0;
     const isAdmin = user && user.role === 'admin';
     const isOwner = user && item.userId === user.id;
+    const isFollowing = user && followingIds.has(item.userId);
     const categoryColor = CATEGORY_COLORS[item.category] || '#6B7280';
 
     return (
       <View style={[styles.postCard, item.category === 'News' && styles.newsPostCard]}>
+        {item.reposted && (
+          <View style={styles.repostBanner}>
+            <Ionicons name="repeat" size={14} color={colors.primary} />
+            <Text style={styles.repostBannerText}>
+              {isOwner ? 'You reposted this' : `${item.userName} reposted`}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.postHeader}>
           <View style={styles.postHeaderLeft}>
             <View
@@ -302,6 +424,12 @@ export default function CommunityScreen({ navigation }) {
             <View style={styles.postUserInfo}>
               <View style={styles.postUserNameRow}>
                 <Text style={styles.postUserName}>{item.userName}</Text>
+                {item.userRole === 'admin' && (
+                  <View style={styles.roleBadge}>
+                    <Ionicons name="shield-checkmark" size={10} color="#fff" />
+                    <Text style={styles.roleBadgeText}>ADMIN</Text>
+                  </View>
+                )}
                 {item.category === 'News' && (
                   <View style={styles.adminBadge}>
                     <Ionicons name="megaphone" size={10} color="#fff" />
@@ -309,9 +437,33 @@ export default function CommunityScreen({ navigation }) {
                   </View>
                 )}
               </View>
+              {item.userHeadline ? (
+                <Text style={styles.postHeadline} numberOfLines={1}>{item.userHeadline}</Text>
+              ) : null}
               <Text style={styles.postTime}>{getTimeAgo(item.createdAt)}</Text>
             </View>
           </View>
+          {user && item.userId !== user.id && (
+            <TouchableOpacity
+              style={[
+                styles.followBtn,
+                isFollowing && styles.followBtnActive,
+              ]}
+              onPress={() => handleFollow(item.userId)}
+              activeOpacity={0.7}
+              accessibilityLabel={isFollowing ? 'Unfollow' : 'Follow'}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={isFollowing ? 'checkmark' : 'add'}
+                size={14}
+                color={isFollowing ? colors.primary : '#fff'}
+              />
+              <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
+                {isFollowing ? 'Following' : 'Follow'}
+              </Text>
+            </TouchableOpacity>
+          )}
           {(isAdmin || isOwner) && (
             <TouchableOpacity
               style={styles.deleteBtn}
@@ -336,6 +488,24 @@ export default function CommunityScreen({ navigation }) {
         <Text style={styles.postTitle}>{item.title}</Text>
         <Text style={styles.postDescription}>{item.description}</Text>
 
+        {item.imageUrl ? (
+          <Image source={{ uri: item.imageUrl }} style={styles.postImage} />
+        ) : null}
+
+        {(likeCount > 0 || commentCount > 0) && (
+          <View style={styles.postStatsRow}>
+            {likeCount > 0 ? (
+              <View style={styles.postStatsLeft}>
+                <Ionicons name="heart" size={13} color="#F44336" />
+                <Text style={styles.postStatsText}>{likeCount} reactions</Text>
+              </View>
+            ) : null}
+            <Text style={styles.postStatsText}>
+              {commentCount > 0 ? `${commentCount} comments` : 'No comments yet'}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.postActions}>
           <TouchableOpacity
             style={styles.actionBtn}
@@ -343,23 +513,21 @@ export default function CommunityScreen({ navigation }) {
             activeOpacity={0.7}
             accessibilityLabel={isLiked ? "Unlike post" : "Like post"}
             accessibilityRole="button"
-            accessibilityState={{ selected: isLiked }}
+            accessibilityState={{ selected: !!isLiked }}
           >
             <Ionicons
               name={isLiked ? 'heart' : 'heart-outline'}
               size={20}
               color={isLiked ? '#F44336' : colors.textMuted}
             />
-            {likeCount > 0 && (
-              <Text
-                style={[
-                  styles.actionText,
-                  { color: isLiked ? '#F44336' : colors.textMuted },
-                ]}
-              >
-                {likeCount}
-              </Text>
-            )}
+            <Text
+              style={[
+                styles.actionText,
+                { color: isLiked ? '#F44336' : colors.textMuted },
+              ]}
+            >
+              Like
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -370,9 +538,29 @@ export default function CommunityScreen({ navigation }) {
             accessibilityRole="button"
           >
             <Ionicons name="chatbubble-outline" size={19} color={colors.textMuted} />
-            {commentCount > 0 && (
-              <Text style={styles.actionText}>{commentCount}</Text>
-            )}
+            <Text style={styles.actionText}>Comment</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => handleRepost(item)}
+            activeOpacity={0.7}
+            accessibilityLabel="Repost"
+            accessibilityRole="button"
+          >
+            <Ionicons name="repeat" size={20} color={colors.textMuted} />
+            <Text style={styles.actionText}>Repost</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => handleNativeShare(item)}
+            activeOpacity={0.7}
+            accessibilityLabel="Share post"
+            accessibilityRole="button"
+          >
+            <Ionicons name="send" size={19} color={colors.textMuted} />
+            <Text style={styles.actionText}>Send</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -408,10 +596,7 @@ export default function CommunityScreen({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Community Board</Text>
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading posts...</Text>
-        </View>
+        <CommunitySkeleton />
       </SafeAreaView>
     );
   }
@@ -464,6 +649,39 @@ export default function CommunityScreen({ navigation }) {
           styles.postsList,
           displayPosts.length === 0 && styles.postsListEmpty,
         ]}
+        ListHeaderComponent={user ? (
+          <View style={styles.composerCard}>
+            <View
+              style={[
+                styles.composerAvatar,
+                { backgroundColor: getAvatarColor(user.name) },
+              ]}
+            >
+              <Text style={styles.composerAvatarText}>{getInitials(user.name)}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.composerInput}
+              activeOpacity={0.6}
+              onPress={() => setCreateModalVisible(true)}
+              accessibilityLabel="Start a post"
+              accessibilityRole="button"
+            >
+              <Text style={styles.composerPlaceholder}>
+                {user.headline ? `Start a post${user.headline ? ' — share what you know' : ''}` : 'Start a post'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.composerPhotoBtn}
+              activeOpacity={0.6}
+              onPress={() => { setCreateModalVisible(true); setTimeout(pickImage, 350); }}
+              accessibilityLabel="Post a photo"
+              accessibilityRole="button"
+            >
+              <Ionicons name="image-outline" size={22} color={colors.primary} />
+              <Text style={styles.composerPhotoText}>Photo</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         ListEmptyComponent={renderEmpty}
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
@@ -476,7 +694,7 @@ export default function CommunityScreen({ navigation }) {
         visible={createModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setCreateModalVisible(false)}
+        onRequestClose={() => { setCreateModalVisible(false); setSelectedImage(null); }}
       >
         <SafeAreaView style={styles.modalContainer}>
           <KeyboardAvoidingView
@@ -526,8 +744,34 @@ export default function CommunityScreen({ navigation }) {
                 onChangeText={setNewDescription}
                 multiline
                 textAlignVertical="top"
+                maxLength={2000}
                 accessibilityLabel="Post description"
               />
+
+              {selectedImage ? (
+                <View style={styles.imagePreviewContainer}>
+                  <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    onPress={() => setSelectedImage(null)}
+                    accessibilityLabel="Remove image"
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="close-circle" size={24} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.addImageButton}
+                  activeOpacity={0.7}
+                  onPress={pickImage}
+                  accessibilityLabel="Add photo"
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="image-outline" size={22} color={colors.primary} />
+                  <Text style={[styles.addImageText, { color: colors.primary }]}>Add Photo</Text>
+                </TouchableOpacity>
+              )}
 
               <Text style={styles.inputLabel}>Category</Text>
               <TouchableOpacity
@@ -620,7 +864,7 @@ export default function CommunityScreen({ navigation }) {
           >
             <View style={styles.modalHeader}>
               <TouchableOpacity
-                onPress={() => setCommentsModalVisible(false)}
+                onPress={closeComments}
                 style={styles.modalCloseBtn}
               >
                 <Ionicons name="close" size={24} color={colors.text} />
@@ -662,7 +906,7 @@ export default function CommunityScreen({ navigation }) {
             )}
 
             <FlatList
-              data={selectedPost?.comments || []}
+              data={postComments}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.commentsList}
               ListEmptyComponent={
@@ -715,6 +959,7 @@ export default function CommunityScreen({ navigation }) {
                 value={newComment}
                 onChangeText={setNewComment}
                 multiline
+                maxLength={500}
                 accessibilityLabel="Write a comment"
               />
               <TouchableOpacity
@@ -728,7 +973,7 @@ export default function CommunityScreen({ navigation }) {
                 activeOpacity={0.7}
                 accessibilityLabel="Send comment"
                 accessibilityRole="button"
-                accessibilityState={{ disabled: !newComment.trim() || commenting }}
+                accessibilityState={{ disabled: !(newComment.trim()) || !!commenting }}
               >
                 {commenting ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -820,6 +1065,79 @@ const getStyles = (colors) => createStyleSheet({
     fontWeight: 'bold',
     color: '#fff',
     letterSpacing: 0.5,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a237e',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 3,
+  },
+  roleBadgeText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  repostBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  repostBannerText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  followBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+    marginRight: 8,
+  },
+  followBtnActive: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  followBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  followBtnTextActive: {
+    color: colors.primary,
+  },
+  postHeadline: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  postStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    marginBottom: 10,
+  },
+  postStatsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  postStatsText: {
+    fontSize: 12,
+    color: colors.textMuted,
   },
 
   loadingContainer: {
@@ -915,21 +1233,78 @@ const getStyles = (colors) => createStyleSheet({
     lineHeight: 21,
     marginBottom: 14,
   },
+  postImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
   postActions: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     paddingTop: 12,
-    gap: 20,
+    gap: 8,
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+    justifyContent: 'center',
   },
   actionText: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+
+  composerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+    gap: 10,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  composerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  composerAvatarText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  composerInput: {
+    flex: 1,
+    backgroundColor: colors.borderLight,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  composerPlaceholder: {
     fontSize: 14,
     color: colors.textMuted,
+  },
+  composerPhotoBtn: {
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 4,
+  },
+  composerPhotoText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '500',
   },
 
   emptyContainer: {
@@ -1005,13 +1380,18 @@ const getStyles = (colors) => createStyleSheet({
     color: colors.text,
   },
   modalPostBtn: {
-    width: 50,
-    alignItems: 'flex-end',
+    backgroundColor: '#1a237e',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
   },
   modalPostBtnText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1a237e',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
   },
   modalBody: {
     flex: 1,
@@ -1058,6 +1438,37 @@ const getStyles = (colors) => createStyleSheet({
     fontSize: 15,
     color: colors.text,
     fontWeight: '500',
+  },
+  addImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginBottom: 20,
+    gap: 8,
+  },
+  addImageText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
   },
   charCount: {
     textAlign: 'right',

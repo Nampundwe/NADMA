@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -18,11 +17,13 @@ import {
   getCurrentUser,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { createStyleSheet } from '../utils/responsive';
 
 export default function RegisterScreen({ navigation }) {
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const toast = useToast();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -39,23 +40,23 @@ export default function RegisterScreen({ navigation }) {
 
   const handleRegister = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter your business name');
+      toast.error('Please enter your business name');
       return;
     }
     if (!category) {
-      Alert.alert('Error', 'Please select a category');
+      toast.error('Please select a category');
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
+      toast.error('Please enter a description');
       return;
     }
     if (!phone.trim()) {
-      Alert.alert('Error', 'Please enter a phone number');
+      toast.error('Please enter a phone number');
       return;
     }
     if (!address.trim()) {
-      Alert.alert('Error', 'Please enter an address');
+      toast.error('Please enter an address');
       return;
     }
 
@@ -82,13 +83,10 @@ export default function RegisterScreen({ navigation }) {
 
     try {
       await saveRegisteredBusiness(newBusiness);
-      Alert.alert(
-        'Submitted!',
-        'Your business registration has been submitted for admin approval. You will be notified once it is reviewed.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      toast.success('Business registered!');
+      navigation.goBack();
     } catch (error) {
-      Alert.alert('Error', 'Failed to save your business. Please try again.');
+      toast.error('Failed to save business');
     }
   };
 
@@ -116,6 +114,7 @@ export default function RegisterScreen({ navigation }) {
                 placeholderTextColor={colors.textMuted}
                 value={name}
                 onChangeText={setName}
+                maxLength={50}
               />
             </View>
 
@@ -180,6 +179,7 @@ export default function RegisterScreen({ navigation }) {
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
+                maxLength={500}
               />
             </View>
 
@@ -192,6 +192,7 @@ export default function RegisterScreen({ navigation }) {
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
+                maxLength={15}
               />
             </View>
 
@@ -203,6 +204,7 @@ export default function RegisterScreen({ navigation }) {
                 placeholderTextColor={colors.textMuted}
                 value={address}
                 onChangeText={setAddress}
+                maxLength={100}
               />
             </View>
 
@@ -214,6 +216,7 @@ export default function RegisterScreen({ navigation }) {
                 placeholderTextColor={colors.textMuted}
                 value={hours}
                 onChangeText={setHours}
+                maxLength={50}
               />
             </View>
 
@@ -225,6 +228,7 @@ export default function RegisterScreen({ navigation }) {
                 placeholderTextColor={colors.textMuted}
                 value={services}
                 onChangeText={setServices}
+                maxLength={200}
               />
             </View>
 

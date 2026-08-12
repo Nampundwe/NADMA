@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getMessaging } from 'firebase/messaging';
+import { getStorage } from 'firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCbcYniF1ELxbhNT_nAjLjPQVLmmpPPEZ4',
@@ -14,14 +15,24 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
 export const db = getFirestore(app);
-export let messaging = null;
+export const storage = getStorage(app);
 
-try {
-  messaging = getMessaging(app);
-} catch (e) {
-  messaging = null;
-}
+let _messaging = null;
+let _messagingTried = false;
+export const getMessagingInstance = () => {
+  if (_messagingTried) return _messaging;
+  _messagingTried = true;
+  try {
+    const { getMessaging } = require('firebase/messaging');
+    _messaging = getMessaging(app);
+  } catch (e) {
+    _messaging = null;
+  }
+  return _messaging;
+};
 
 export default app;

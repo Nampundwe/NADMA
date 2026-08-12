@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-
+  StyleSheet,
   ScrollView,
   Image,
   TouchableOpacity,
@@ -12,7 +12,6 @@ import {
   Share,
   Modal,
   TextInput,
-  FlatList,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
@@ -27,15 +26,28 @@ import {
   deleteReview,
   deleteBusiness,
   updateServiceProvider,
+  uploadImage,
   addReport,
   getProviderAvailability,
+  replyToReview,
+  onReviewsSnapshot,
+  onProviderSnapshot,
+  toggleFollow,
+  isFollowing,
+  onFollowersSnapshot,
+  endorseSkill,
+  updateProviderSkills,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../utils/haptics';
+import { useNetworkAction } from '../utils/useNetworkAction';
 import { createStyleSheet } from '../utils/responsive';
+import { useToast } from '../context/ToastContext';
 
 export default function ServiceDetailScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const toast = useToast();
+  const { run } = useNetworkAction();
   const { service } = route.params;
   const [fav, setFav] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -49,19 +61,66 @@ export default function ServiceDetailScreen({ route, navigation }) {
   const [reportReason, setReportReason] = useState('');
   const [reportCategory, setReportCategory] = useState('Other');
   const [availability, setAvailability] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState(service.name || '');
+  const [editDescription, setEditDescription] = useState(service.description || '');
+  const [editPhone, setEditPhone] = useState(service.phone || '');
+  const [editAddress, setEditAddress] = useState(service.address || '');
+  const [editHours, setEditHours] = useState(service.hours || '');
+  const [editServices, setEditServices] = useState((service.services || []).join(', '));
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [following, setFollowing] = useState(false);
+  const [followers, setFollowers] = useState(0);
+  const [skills, setSkills] = useState(service.skills || []);
+  const [endorsingSkill, setEndorsingSkill] = useState(null);
+  const [editSkills, setEditSkills] = useState((service.skills || []).map((s) => (typeof s === 'string' ? s : s.name)).join(', '));
+  const followersUnsubRef = React.useRef(null);
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   useEffect(() => {
+    let unsubReviews = null;
+    let unsubProvider = null;
+    let loaded = false;
     (async () => {
-      await Promise.all([
-        isFavorite(service.id).then(setFav),
-        getReviews(service.id).then(setReviews),
-        getCurrentUser().then(setUser),
-      ]);
-      setLoading(false);
+      await isFavorite(service.id).then(setFav);
+      getCurrentUser().then((u) => {
+        setUser(u);
+        if (u) {
+          isFollowing(u.id, service.id).then(setFollowing);
+          followersUnsubRef.current = onFollowersSnapshot(service.id, setFollowers);
+        }
+      });
+      unsubReviews = onReviewsSnapshot(service.id, (reviews) => {
+        setReviews(reviews);
+        if (!loaded) { loaded = true; setPageLoading(false); }
+      });
+      unsubProvider = onProviderSnapshot(service.id, (data) => {
+        service.name = data.name;
+        service.description = data.description;
+        service.phone = data.phone;
+        service.address = data.address;
+        service.hours = data.hours;
+        service.services = data.services;
+        service.image = data.image;
+        service.rating = data.rating;
+        service.reviews = data.reviews;
+        service.ownerId = data.ownerId;
+        service.headline = data.headline;
+        setSkills(data.skills || []);
+        setEditName(data.name || '');
+        setEditDescription(data.description || '');
+        setEditPhone(data.phone || '');
+        setEditAddress(data.address || '');
+        setEditHours(data.hours || '');
+        setEditServices((data.services || []).join(', '));
+        setEditSkills((data.skills || []).map((s) => (typeof s === 'string' ? s : s.name)).join(', '));
+      });
+      setTimeout(() => { if (!loaded) { loaded = true; setPageLoading(false); } }, 3000);
     })();
+    return () => { if (unsubReviews) unsubReviews(); if (unsubProvider) unsubProvider(); if (followersUnsubRef.current) followersUnsubRef.current(); };
   }, [service.id]);
 
   useEffect(() => {
@@ -71,6 +130,8 @@ export default function ServiceDetailScreen({ route, navigation }) {
   }, [service.id]);
 
   const isAdmin = user?.role === 'admin';
+  const isProvider = user?.role === 'provider';
+  const isOwner = isProvider && user?.id && service.ownerId === user.id;
   const initials = service.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
 
   const openPhone = () => Linking.openURL(`tel:${service.phone}`);
@@ -102,9 +163,9 @@ export default function ServiceDetailScreen({ route, navigation }) {
     }
   };
 
-  const handleSubmitReview = async () => {
+  const handleSubmitReview = () => run(async () => {
     if (!reviewText.trim()) {
-      Alert.alert('Error', 'Please write a review');
+      toast.error('Please write a review');
       return;
     }
     const review = {
@@ -118,16 +179,14 @@ export default function ServiceDetailScreen({ route, navigation }) {
     };
     const result = await addReview(review);
     if (result === true || result?.success !== false) {
-      const updatedReviews = await getReviews(service.id);
-      setReviews(updatedReviews);
       hapticSuccess();
       setShowReviewModal(false);
       setReviewText('');
       setReviewRating(5);
     } else {
-      Alert.alert('Error', result?.error || 'Failed to submit review.');
+      toast.error(result?.error || 'Failed to submit review');
     }
-  };
+  });
 
   const handleDeleteReview = (reviewId) => {
     Alert.alert('Delete Review', 'Are you sure?', [
@@ -152,17 +211,60 @@ export default function ServiceDetailScreen({ route, navigation }) {
         style: 'destructive',
         onPress: async () => {
           await deleteBusiness(service.id);
-          Alert.alert('Deleted', 'Business has been removed.');
+          toast.success('Business removed');
           navigation.goBack();
         },
       },
     ]);
   };
 
+  const handleSaveEdit = () => run(async () => {
+    if (!editName.trim()) {
+      toast.error('Business name is required');
+      return;
+    }
+    const servicesList = editServices.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    await updateServiceProvider(service.id, {
+      name: editName.trim(),
+      description: editDescription.trim(),
+      phone: editPhone.trim(),
+      address: editAddress.trim(),
+      hours: editHours.trim(),
+      services: servicesList.length > 0 ? servicesList : ['General Service'],
+    });
+    const skillsInput = editSkills.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    const skillsList = skillsInput.map((name) => {
+      const existing = skills.find((s) => (typeof s === 'string' ? s === name : s.name === name));
+      if (existing && typeof existing !== 'string') return existing;
+      return { name, endorsements: 0 };
+    });
+    await updateProviderSkills(service.id, skillsList);
+    setSkills(skillsList);
+    hapticSuccess();
+    toast.success('Business updated');
+    setShowEditModal(false);
+  });
+
+  const handleReplyToReview = (reviewId) => run(async () => {
+    if (!replyText.trim()) {
+      toast.error('Please write a reply');
+      return;
+    }
+    const result = await replyToReview(reviewId, replyText.trim());
+    if (result) {
+      hapticSuccess();
+      setReplyingTo(null);
+      setReplyText('');
+      toast.success('Reply posted');
+    } else {
+      toast.error('Failed to post reply');
+    }
+  });
+
   const handleChangeProfilePic = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Please grant camera roll access to change the profile photo.');
+      toast.error('Please grant camera roll access');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -170,18 +272,57 @@ export default function ServiceDetailScreen({ route, navigation }) {
       quality: 0.7,
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      await updateServiceProvider(service.id, { image: result.assets[0].uri });
-      service.image = result.assets[0].uri;
-      Alert.alert('Updated', 'Profile photo has been changed.');
+      const localUri = result.assets[0].uri;
+      toast.info('Uploading photo...');
+      const url = await uploadImage(`provider-images/${service.id}.jpg`, localUri);
+      if (url) {
+        await updateServiceProvider(service.id, { image: url });
+        service.image = url;
+        toast.success('Profile photo updated');
+      } else {
+        toast.error('Failed to upload photo');
+      }
     }
   };
 
-  const handleReport = async () => {
-    if (!reportReason.trim()) {
-      Alert.alert('Error', 'Please describe the issue');
+  const handleFollowProvider = () => run(async () => {
+    if (!user) {
+      toast.error('Please log in to follow providers');
       return;
     }
-    const report = {
+    hapticLight();
+    const nowFollowing = await toggleFollow(user.id, service.id, 'provider');
+    setFollowing(nowFollowing);
+    toast.success(nowFollowing ? `Now following ${service.name}` : `Unfollowed ${service.name}`);
+  });
+
+  const handleEndorse = (skillName) => run(async () => {
+    if (!user) {
+      toast.error('Please log in to endorse skills');
+      return;
+    }
+    hapticMedium();
+    setEndorsingSkill(skillName);
+    const ok = await endorseSkill(service.id, skillName);
+    setEndorsingSkill(null);
+    if (ok) {
+      setSkills((prev) => prev.map((s) => {
+        const name = typeof s === 'string' ? s : s.name;
+        if (name !== skillName) return s;
+        return { name, endorsements: (typeof s === 'string' ? 0 : s.endorsements || 0) + 1 };
+      }));
+      hapticSuccess();
+      toast.success(`Endorsed ${skillName}`);
+    } else {
+      toast.error('Failed to endorse skill');
+    }
+  });
+
+  const handleReport = async () => {
+    if (!reportReason.trim()) {
+      toast.error('Please describe the issue');
+      return;
+    }    const report = {
       id: 'report_' + Date.now(),
       providerId: service.id,
       providerName: service.name,
@@ -197,9 +338,9 @@ export default function ServiceDetailScreen({ route, navigation }) {
       setShowReportModal(false);
       setReportReason('');
       setReportCategory('Other');
-      Alert.alert('Reported', 'Thank you for your report. Admin will review it.');
+      toast.success('Report submitted. Admin will review it.');
     } else {
-      Alert.alert('Error', result?.error || 'Failed to submit report.');
+      toast.error(result?.error || 'Failed to submit report');
     }
   };
 
@@ -235,10 +376,38 @@ export default function ServiceDetailScreen({ route, navigation }) {
           <Text style={styles.replyText}>{item.reply}</Text>
         </View>
       )}
+      {isOwner && !item.reply && (
+        replyingTo === item.id ? (
+          <View style={{ marginTop: 8 }}>
+            <TextInput
+              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, fontSize: 14, color: colors.text, backgroundColor: colors.inputBg, minHeight: 60 }}
+              placeholder="Write a reply..."
+              placeholderTextColor={colors.textMuted}
+              value={replyText}
+              onChangeText={setReplyText}
+              multiline
+              maxLength={500}
+            />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+              <TouchableOpacity style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.primary }} onPress={() => handleReplyToReview(item.id)}>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Reply</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border }} onPress={() => { setReplyingTo(null); setReplyText(''); }}>
+                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => setReplyingTo(item.id)}>
+            <Ionicons name="chatbubble-outline" size={14} color={colors.primary} />
+            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '500' }}>Reply</Text>
+          </TouchableOpacity>
+        )
+      )}
     </View>
   );
 
-  if (loading) {
+  if (pageLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -268,7 +437,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
             style={styles.profilePicWrapper}
             activeOpacity={0.8}
             onPress={() => {
-              if (isAdmin) {
+              if (isAdmin || isOwner) {
                 Alert.alert('Profile Photo', 'Choose an option', [
                   { text: 'View Full Picture', onPress: () => setShowFullImage(true) },
                   { text: 'Change Photo', onPress: handleChangeProfilePic },
@@ -278,17 +447,17 @@ export default function ServiceDetailScreen({ route, navigation }) {
                 setShowFullImage(true);
               }
             }}
-            accessibilityLabel={isAdmin ? "View or change profile photo" : "View profile photo"}
+            accessibilityLabel={isAdmin || isOwner ? "View or change profile photo" : "View profile photo"}
             accessibilityRole="button"
           >
             <Image source={{ uri: service.image }} style={styles.profilePic} />
-            {isAdmin && (
+            {(isAdmin || isOwner) && (
               <View style={styles.profilePicOverlay} pointerEvents="none">
                 <Ionicons name="camera" size={16} color="#fff" />
               </View>
             )}
           </TouchableOpacity>
-          {isAdmin ? (
+          {(isAdmin || isOwner) ? (
             <Text style={styles.changePhotoText}>Tap photo to view or change</Text>
           ) : (
             <Text style={styles.changePhotoText}>Tap photo to view</Text>
@@ -300,7 +469,27 @@ export default function ServiceDetailScreen({ route, navigation }) {
           <View style={styles.titleSection}>
             <View style={styles.titleRow}>
               <Text style={styles.name}>{service.name}</Text>
+              <TouchableOpacity
+                style={[styles.followBtn, following && styles.followBtnActive]}
+                onPress={handleFollowProvider}
+                activeOpacity={0.7}
+                accessibilityLabel={following ? 'Unfollow provider' : 'Follow provider'}
+                accessibilityRole="button"
+                accessibilityState={{ selected: following }}
+              >
+                <Ionicons
+                  name={following ? 'checkmark' : 'add'}
+                  size={16}
+                  color={following ? colors.primary : '#fff'}
+                />
+                <Text style={[styles.followBtnText, following && styles.followBtnTextActive]}>
+                  {following ? 'Following' : 'Follow'}
+                </Text>
+              </TouchableOpacity>
             </View>
+            <Text style={styles.headline}>
+              {service.headline || `${service.category} professional in Nampundwe`}
+            </Text>
             <View style={styles.metaRow}>
               <View style={styles.ratingBadge}>
                 <Ionicons name="star" size={14} color="#FFD700" />
@@ -325,9 +514,18 @@ export default function ServiceDetailScreen({ route, navigation }) {
                 </View>
               )}
             </View>
+            {followers > 0 && (
+              <View style={styles.followersRow}>
+                <Ionicons name="people" size={13} color={colors.textMuted} />
+                <Text style={styles.followersText}>{followers} followers</Text>
+              </View>
+            )}
           </View>
 
-          <Text style={styles.description}>{service.description}</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>About</Text>
+            <Text style={styles.description}>{service.description}</Text>
+          </View>
 
           {/* Services */}
           <View style={styles.section}>
@@ -341,6 +539,48 @@ export default function ServiceDetailScreen({ route, navigation }) {
               ))}
             </View>
           </View>
+
+          {/* Skills & Endorsements */}
+          {skills.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Skills & Endorsements</Text>
+              <View style={styles.skillsList}>
+                {skills.map((skill, index) => {
+                  const skillName = typeof skill === 'string' ? skill : skill.name;
+                  const endorsements = typeof skill === 'string' ? 0 : skill.endorsements || 0;
+                  return (
+                    <View key={index} style={styles.skillRow}>
+                      <View style={styles.skillInfo}>
+                        <Text style={styles.skillName}>{skillName}</Text>
+                        <Text style={styles.skillEndorsements}>
+                          {endorsements > 0 ? `${endorsements} endorsement${endorsements > 1 ? 's' : ''}` : 'Be the first to endorse'}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.endorseBtn,
+                          endorsingSkill === skillName && styles.endorseBtnActive,
+                        ]}
+                        onPress={() => handleEndorse(skillName)}
+                        activeOpacity={0.7}
+                        accessibilityLabel={`Endorse ${skillName}`}
+                        accessibilityRole="button"
+                      >
+                        {endorsingSkill === skillName ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <>
+                            <Ionicons name="thumbs-up-outline" size={14} color={colors.primary} />
+                            <Text style={styles.endorseBtnText}>Endorse</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           {/* Availability */}
           {availability && availability.days && availability.days.length > 0 && (
@@ -492,6 +732,20 @@ export default function ServiceDetailScreen({ route, navigation }) {
             </TouchableOpacity>
           )}
 
+          {/* Provider Edit */}
+          {isOwner && (
+            <TouchableOpacity
+              style={styles.providerEditButton}
+              activeOpacity={0.8}
+              onPress={() => setShowEditModal(true)}
+              accessibilityLabel="Edit business"
+              accessibilityRole="button"
+            >
+              <Ionicons name="create" size={18} color="#fff" />
+              <Text style={styles.providerEditText}>Edit Business</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Admin Delete */}
           {isAdmin && (
             <TouchableOpacity
@@ -578,6 +832,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
               multiline
               numberOfLines={4}
               textAlignVertical="top"
+              maxLength={1000}
               accessibilityLabel="Write your review"
             />
 
@@ -635,6 +890,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
               multiline
               numberOfLines={4}
               textAlignVertical="top"
+              maxLength={500}
               accessibilityLabel="Report reason"
             />
             <View style={styles.reviewModalButtons}>
@@ -643,6 +899,56 @@ export default function ServiceDetailScreen({ route, navigation }) {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.submitReviewButton, { backgroundColor: '#FF9800' }]} onPress={handleReport} accessibilityLabel="Submit report" accessibilityRole="button">
                 <Text style={styles.submitReviewText}>Submit Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Edit Business Modal */}
+      <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowEditModal(false)}>
+          <View style={styles.bottomModal}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Edit Business</Text>
+
+            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Business Name</Text>
+                <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editName} onChangeText={setEditName} maxLength={50} />
+              </View>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Description</Text>
+                <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg, minHeight: 80 }} value={editDescription} onChangeText={setEditDescription} multiline maxLength={300} />
+              </View>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Phone</Text>
+                <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" maxLength={20} />
+              </View>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Address</Text>
+                <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editAddress} onChangeText={setEditAddress} maxLength={100} />
+              </View>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Hours</Text>
+                <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editHours} onChangeText={setEditHours} maxLength={50} />
+              </View>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Services (comma separated)</Text>
+                <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editServices} onChangeText={setEditServices} maxLength={200} />
+              </View>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Skills (comma separated)</Text>
+                <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editSkills} onChangeText={setEditSkills} maxLength={300} />
+              </View>
+            </ScrollView>
+
+            <View style={styles.reviewModalButtons}>
+              <TouchableOpacity style={styles.cancelReviewButton} onPress={() => setShowEditModal(false)}>
+                <Text style={styles.cancelReviewText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.submitReviewButton} onPress={handleSaveEdit}>
+                <Text style={styles.submitReviewText}>Save Changes</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -764,6 +1070,93 @@ const getStyles = (colors) => createStyleSheet({
     color: colors.text,
     flex: 1,
     lineHeight: 30,
+  },
+  headline: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  followBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
+  },
+  followBtnActive: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  followBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  followBtnTextActive: {
+    color: colors.primary,
+  },
+  followersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  followersText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    fontWeight: '500',
+  },
+  skillsList: {
+    gap: 8,
+  },
+  skillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+    gap: 10,
+  },
+  skillInfo: {
+    flex: 1,
+  },
+  skillName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  skillEndorsements: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  endorseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+    minWidth: 90,
+    justifyContent: 'center',
+  },
+  endorseBtnActive: {
+    opacity: 0.6,
+  },
+  endorseBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
   },
   metaRow: {
     flexDirection: 'row',
@@ -928,6 +1321,21 @@ const getStyles = (colors) => createStyleSheet({
     fontSize: 15,
     fontWeight: '600',
     color: colors.primary,
+  },
+  providerEditButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#1B5E20',
+    marginBottom: 10,
+    gap: 8,
+  },
+  providerEditText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
   },
   adminDeleteButton: {
     flexDirection: 'row',

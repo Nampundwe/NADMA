@@ -2,7 +2,6 @@ import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
@@ -19,21 +18,28 @@ import {
   getFavorites,
   getAllReviews,
   getRegisteredBusinesses,
-  setCurrentUser,
   generateReferralCode,
+  onFollowersSnapshot,
+  getFollowingCount,
 } from '../data/firebaseStorage';
 import { AuthContext } from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
 import { createStyleSheet } from '../utils/responsive';
+import { useToast } from '../context/ToastContext';
 
 export default function ProfileScreen({ navigation }) {
   const { onLogout } = useContext(AuthContext);
   const { colors } = useTheme();
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
+  const [editingHeadline, setEditingHeadline] = useState(false);
+  const [editHeadline, setEditHeadline] = useState('');
   const [stats, setStats] = useState({ favorites: 0, reviews: 0, businesses: 0 });
+  const [followers, setFollowers] = useState(0);
+  const [following, setFollowing] = useState(0);
   const [referralCode, setReferralCode] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -42,11 +48,21 @@ export default function ProfileScreen({ navigation }) {
     return unsubscribe;
   }, [navigation]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsubFollowers = onFollowersSnapshot(user.id, (count) => setFollowers(count));
+    getFollowingCount(user.id).then(setFollowing);
+    return () => {
+      if (unsubFollowers) unsubFollowers();
+    };
+  }, [user?.id]);
+
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
     if (currentUser) {
       setEditName(currentUser.name);
+      setEditHeadline(currentUser.headline || '');
       const favs = await getFavorites();
       const reviews = await getAllReviews();
       const businesses = await getRegisteredBusinesses();
@@ -78,13 +94,21 @@ export default function ProfileScreen({ navigation }) {
 
   const handleSaveName = async () => {
     if (!editName.trim()) {
-      Alert.alert('Error', 'Name cannot be empty');
+      toast.error('Name cannot be empty');
       return;
     }
     await updateCurrentUser({ name: editName.trim() });
     hapticSuccess();
     setUser({ ...user, name: editName.trim() });
     setEditing(false);
+  };
+
+  const handleSaveHeadline = async () => {
+    const headline = editHeadline.trim();
+    await updateCurrentUser({ headline });
+    hapticSuccess();
+    setUser({ ...user, headline });
+    setEditingHeadline(false);
   };
 
   const getRoleBadge = () => {
@@ -235,10 +259,11 @@ export default function ProfileScreen({ navigation }) {
     },
     statsRow: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       backgroundColor: colors.card,
       margin: 16,
       borderRadius: 16,
-      padding: 20,
+      padding: 12,
       shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.06,
@@ -246,13 +271,12 @@ export default function ProfileScreen({ navigation }) {
       elevation: 3,
     },
     statItem: {
-      flex: 1,
+      width: '50%',
+      flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-    },
-    statDivider: {
-      width: 1,
-      backgroundColor: colors.borderLight,
+      gap: 8,
+      padding: 8,
+      justifyContent: 'flex-start',
     },
     statNumber: {
       fontSize: 22,
@@ -262,6 +286,34 @@ export default function ProfileScreen({ navigation }) {
     statLabel: {
       fontSize: 12,
       color: colors.textMuted,
+    },
+    headlineRow: {
+      marginBottom: 12,
+      alignItems: 'center',
+    },
+    headlineDisplay: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    userHeadline: {
+      fontSize: 14,
+      color: '#C5CAE9',
+      fontWeight: '500',
+    },
+    editHeadlineContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    editHeadlineInput: {
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      fontSize: 14,
+      color: '#fff',
+      minWidth: 200,
     },
     menuSection: {
       margin: 16,
@@ -379,7 +431,7 @@ export default function ProfileScreen({ navigation }) {
     },
   });
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   if (loading) {
     return (
@@ -408,19 +460,6 @@ export default function ProfileScreen({ navigation }) {
           >
             <Text style={styles.loginButtonText}>Sign In</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.guestInfoBtn}
-            onPress={async () => {
-              await setCurrentUser({
-                id: 'guest', email: '', name: 'Guest', role: 'user',
-              });
-              loadUser();
-            }}
-            accessibilityLabel="Continue as guest"
-            accessibilityRole="button"
-          >
-            <Text style={styles.guestInfoText}>Continue as Guest</Text>
-          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -446,6 +485,7 @@ export default function ProfileScreen({ navigation }) {
                 onChangeText={setEditName}
                 autoFocus
                 placeholderTextColor="#C5CAE9"
+                maxLength={50}
                 accessibilityLabel="Edit name"
               />
                <TouchableOpacity style={styles.editSaveBtn} onPress={handleSaveName} accessibilityLabel="Save name" accessibilityRole="button">
@@ -464,6 +504,41 @@ export default function ProfileScreen({ navigation }) {
             </View>
           )}
           <Text style={styles.userEmail}>{user.email || 'Guest User'}</Text>
+          <View style={styles.headlineRow}>
+            {editingHeadline ? (
+              <View style={styles.editHeadlineContainer}>
+                <TextInput
+                  style={styles.editHeadlineInput}
+                  value={editHeadline}
+                  onChangeText={setEditHeadline}
+                  autoFocus
+                  placeholder="Add a headline e.g. Certified Plumber"
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  maxLength={80}
+                  accessibilityLabel="Edit headline"
+                />
+                <TouchableOpacity style={styles.editSaveBtn} onPress={handleSaveHeadline} accessibilityLabel="Save headline" accessibilityRole="button">
+                  <Ionicons name="checkmark" size={20} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.editCancelBtn} onPress={() => setEditingHeadline(false)} accessibilityLabel="Cancel headline edit" accessibilityRole="button">
+                  <Ionicons name="close" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.headlineDisplay}
+                onPress={() => setEditingHeadline(true)}
+                activeOpacity={0.7}
+                accessibilityLabel="Edit headline"
+                accessibilityRole="button"
+              >
+                <Text style={styles.userHeadline}>
+                  {user.headline || 'Add a professional headline'}
+                </Text>
+                <Ionicons name="pencil" size={14} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={[styles.roleBadge, { backgroundColor: roleBadge.color }]}>
             <Ionicons name={roleBadge.icon} size={12} color="#fff" />
             <Text style={styles.roleBadgeText}>{roleBadge.label}</Text>
@@ -477,13 +552,16 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.statNumber}>{stats.favorites}</Text>
             <Text style={styles.statLabel}>Favorites</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Ionicons name="people" size={20} color="#1a237e" />
+            <Text style={styles.statNumber}>{followers}</Text>
+            <Text style={styles.statLabel}>Followers</Text>
+          </View>
           <View style={styles.statItem}>
             <Ionicons name="chatbubble-ellipses" size={20} color="#FF9800" />
             <Text style={styles.statNumber}>{stats.reviews}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
-          <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Ionicons name="storefront" size={20} color="#4CAF50" />
             <Text style={styles.statNumber}>{stats.businesses}</Text>
@@ -557,6 +635,30 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
+          )}
+
+          {user.role === 'provider' && (
+            <>
+              <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('ProviderDashboard'); }} accessibilityLabel="My business dashboard" accessibilityRole="button">
+                <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
+                  <Ionicons name="business" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.menuItemText}>My Business Dashboard</Text>
+                <View style={styles.menuRight}>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('BookingsManager'); }} accessibilityLabel="Manage bookings" accessibilityRole="button">
+                <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
+                  <Ionicons name="clipboard" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.menuItemText}>Manage Bookings</Text>
+                <View style={styles.menuRight}>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+            </>
           )}
         </View>
 

@@ -16,6 +16,7 @@ import {
   getBookingsByBusiness,
   getReviews,
   getProviderStats,
+  getProviderByOwnerId,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { createStyleSheet } from '../utils/responsive';
@@ -28,9 +29,12 @@ const STATUS_COLORS = {
 };
 
 export default function ProviderDashboardScreen({ route, navigation }) {
-  const { providerId, providerName } = route.params;
   const { colors } = useTheme();
+  const routeProviderId = route.params?.providerId;
+  const routeProviderName = route.params?.providerName;
 
+  const [providerId, setProviderId] = useState(routeProviderId || null);
+  const [providerName, setProviderName] = useState(routeProviderName || '');
   const [stats, setStats] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -45,10 +49,28 @@ export default function ProviderDashboardScreen({ route, navigation }) {
   const loadDashboard = async () => {
     setLoading(true);
     try {
+      let pid = providerId;
+      let pname = providerName;
+      if (!pid) {
+        const user = await getCurrentUser();
+        if (user) {
+          const provider = await getProviderByOwnerId(user.id);
+          if (provider) {
+            pid = provider.id;
+            pname = provider.name;
+            setProviderId(pid);
+            setProviderName(pname);
+          }
+        }
+      }
+      if (!pid) {
+        setLoading(false);
+        return;
+      }
       const [providerStats, allBookings, allReviews] = await Promise.all([
-        getProviderStats(providerId),
-        getBookingsByBusiness(providerId),
-        getReviews(providerId),
+        getProviderStats(pid),
+        getBookingsByBusiness(pid),
+        getReviews(pid),
       ]);
 
       setStats(providerStats);
@@ -84,7 +106,7 @@ export default function ProviderDashboardScreen({ route, navigation }) {
     return stars;
   };
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   if (loading) {
     return (

@@ -7,19 +7,23 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { createBooking, getCurrentUser } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { hapticLight, hapticSuccess, hapticError } from '../utils/haptics';
+import { useNetworkAction } from '../utils/useNetworkAction';
 import { createStyleSheet } from '../utils/responsive';
 
 export default function BookingScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const toast = useToast();
+  const { loading, run } = useNetworkAction();
   const { service } = route.params;
   const [date, setDate] = useState(null);
   const [time, setTime] = useState('');
@@ -56,7 +60,7 @@ export default function BookingScreen({ route, navigation }) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       if (selectedDate < today) {
-        Alert.alert('Error', 'Please select a date today or later');
+        toast.error('Please select a date today or later');
         return;
       }
       setDate(selectedDate);
@@ -70,29 +74,26 @@ export default function BookingScreen({ route, navigation }) {
     }
   };
 
-  const handleBooking = async () => {
+  const handleBooking = () => run(async () => {
     if (!date) {
       hapticError();
-      Alert.alert('Error', 'Please select a preferred date');
+      toast.error('Please select a preferred date');
       return;
     }
     if (!time.trim()) {
       hapticError();
-      Alert.alert('Error', 'Please enter a preferred time');
+      toast.error('Please enter a preferred time');
       return;
     }
     if (!description.trim()) {
       hapticError();
-      Alert.alert('Error', 'Please describe what you need');
+      toast.error('Please describe what you need');
       return;
     }
 
     const user = await getCurrentUser();
     if (!user) {
-      Alert.alert('Login Required', 'Please login to book a service', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Login', onPress: () => navigation.navigate('Login') },
-      ]);
+      toast.error('Please login to book a service');
       return;
     }
 
@@ -115,17 +116,13 @@ export default function BookingScreen({ route, navigation }) {
     const result = await createBooking(booking);
     if (result === true || result?.success !== false) {
       hapticSuccess();
-      Alert.alert(
-        'Booking Submitted!',
-        `Your booking with ${service.name} has been submitted and is pending admin approval.\n\nDate: ${formatDate(date)}\nTime: ${time}\n\nYou will be notified once the admin reviews your booking.`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      toast.success('Booking request sent!');
     } else {
-      Alert.alert('Error', result?.error || 'Failed to create booking. Please try again.');
+      toast.error(result?.error || 'Failed to create booking');
     }
-  };
+  });
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -203,6 +200,7 @@ export default function BookingScreen({ route, navigation }) {
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
+                maxLength={500}
                 accessibilityLabel="Describe what you need"
               />
             </View>
@@ -285,9 +283,15 @@ export default function BookingScreen({ route, navigation }) {
               </View>
             </View>
 
-            <TouchableOpacity style={styles.bookButton} onPress={handleBooking} accessibilityLabel="Confirm booking" accessibilityRole="button">
-              <Ionicons name="checkmark-circle" size={24} color="#fff" />
-              <Text style={styles.bookButtonText}>Confirm Booking</Text>
+            <TouchableOpacity style={[styles.bookButton, loading && { opacity: 0.7 }]} onPress={handleBooking} disabled={loading} accessibilityLabel="Confirm booking" accessibilityRole="button">
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={24} color="#fff" />
+                  <Text style={styles.bookButtonText}>Confirm Booking</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <Text style={styles.note}>

@@ -1,6 +1,8 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { ToastProvider } from './src/context/ToastContext';
+import { ConnectivityProvider } from './src/context/ConnectivityContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
 
@@ -18,7 +20,11 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <AppContent />
+        <ToastProvider>
+          <ConnectivityProvider>
+            <AppContent />
+          </ConnectivityProvider>
+        </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

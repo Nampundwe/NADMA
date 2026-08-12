@@ -22,6 +22,7 @@ if (Platform.OS === 'android') {
 import { Ionicons } from '@expo/vector-icons';
 import {
   getAllUsers,
+  onUsersSnapshot,
   banUser,
   unbanUser,
   deleteUser,
@@ -33,6 +34,7 @@ import {
   deleteReview,
   updateBookingStatus,
   getAdminAnalytics,
+  onAdminAnalyticsSnapshot,
   getAllReports,
   deleteReport,
   onBookingsSnapshot,
@@ -57,10 +59,17 @@ export default function AdminScreen({ navigation }) {
 
   useEffect(() => {
     loadData();
-    const unsubscribe = onBookingsSnapshot((bookings) => {
+    const unsubBookings = onBookingsSnapshot((bookings) => {
       setBookings(bookings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
     });
-    return () => unsubscribe();
+    const unsubUsers = onUsersSnapshot((users) => {
+      setUsers(users);
+      setLoading(false);
+    });
+    const unsubAnalytics = onAdminAnalyticsSnapshot((a) => {
+      setAnalytics(a);
+    });
+    return () => { unsubBookings(); unsubUsers(); unsubAnalytics(); };
   }, []);
 
   const animateList = () => {
@@ -70,6 +79,7 @@ export default function AdminScreen({ navigation }) {
   const loadData = async () => {
     try {
       const u = await getAllUsers();
+      console.log('[Admin loadData] users:', u.length);
       const b = await getRegisteredBusinesses();
       const r = await getAllReviews();
       const a = await getAdminAnalytics();
@@ -80,6 +90,7 @@ export default function AdminScreen({ navigation }) {
       setAnalytics(a || {});
       setReports(rp || []);
     } catch (e) {
+      console.log('[Admin loadData] ERROR:', e.message);
     } finally {
       setLoading(false);
     }
@@ -361,7 +372,7 @@ export default function AdminScreen({ navigation }) {
           <Text style={styles.cardName}>{item.name}</Text>
           <Text style={styles.cardSubtitle}>{item.email}</Text>
         </View>
-        <View style={[styles.roleBadge, { backgroundColor: item.role === 'admin' ? '#E91E63' : '#2196F3' }]}>
+        <View style={[styles.roleBadge, { backgroundColor: item.role === 'admin' ? '#E91E63' : item.role === 'provider' ? '#4CAF50' : '#2196F3' }]}>
           <Text style={styles.roleBadgeText}>{item.role}</Text>
         </View>
       </View>
@@ -425,7 +436,7 @@ export default function AdminScreen({ navigation }) {
     { key: 'reports', label: `Reports (${reports.length})` },
   ];
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   if (loading) {
     return (

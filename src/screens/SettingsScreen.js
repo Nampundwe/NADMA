@@ -17,11 +17,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getCurrentUser,
   updateCurrentUser,
+  changePassword,
   getCachedProviders,
   logout,
 } from '../data/firebaseStorage';
 import { AuthContext } from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
 import { createStyleSheet } from '../utils/responsive';
 
@@ -38,6 +40,7 @@ const SETTINGS_KEY = '@nadma_settings';
 export default function SettingsScreen({ navigation }) {
   const { onLogout } = useContext(AuthContext);
   const { colors, isDark, toggleTheme } = useTheme();
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [settings, setSettings] = useState({
     notifications: true,
@@ -100,36 +103,36 @@ export default function SettingsScreen({ navigation }) {
           const preserve = ['@nadma_current_user', '@nadma_users', '@nadma_favorites', SETTINGS_KEY];
           await AsyncStorage.multiRemove(keys.filter((k) => !preserve.includes(k)));
           setCacheSize('0 keys cached');
-          Alert.alert('Done', 'Cache cleared');
+          toast.success('Cache cleared');
         },
       },
     ]);
   };
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (!currentPassword) {
-      Alert.alert('Error', 'Please enter your current password');
-      return;
-    }
-    if (user && user.password !== currentPassword) {
-      Alert.alert('Error', 'Current password is incorrect');
+      toast.error('Enter your current password');
       return;
     }
     if (!newPassword || newPassword.length < 6) {
-      Alert.alert('Error', 'New password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
-    updateCurrentUser({ password: newPassword });
-    hapticSuccess();
-    setShowPasswordModal(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    Alert.alert('Success', 'Password updated');
+    const result = await changePassword(currentPassword, newPassword);
+    if (result.success) {
+      hapticSuccess();
+      setShowPasswordModal(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success('Password updated');
+    } else {
+      toast.error(result.error);
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -155,7 +158,7 @@ export default function SettingsScreen({ navigation }) {
 
   const languageLabel = LANGUAGES.find((l) => l.code === settings.language)?.label || 'English';
 
-  const s = getStyles(colors);
+  const s = React.useMemo(() => getStyles(colors), [colors]);
 
   return (
     <SafeAreaView style={s.container}>
@@ -327,7 +330,7 @@ export default function SettingsScreen({ navigation }) {
             activeOpacity={0.7}
             onPress={() => Alert.alert('Export Data', 'Request a copy of your data?', [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Request', onPress: () => Alert.alert('Sent', 'Data export request submitted') },
+              { text: 'Request', onPress: () => toast.success('Data export request submitted') },
             ])}
             accessibilityLabel="Export my data"
             accessibilityRole="button"
@@ -454,6 +457,7 @@ export default function SettingsScreen({ navigation }) {
                 secureTextEntry
                 placeholder="Enter current password"
                 placeholderTextColor={colors.textMuted}
+                maxLength={72}
                 accessibilityLabel="Current password"
               />
             </View>
@@ -466,6 +470,7 @@ export default function SettingsScreen({ navigation }) {
                 secureTextEntry
                 placeholder="Min 6 characters"
                 placeholderTextColor={colors.textMuted}
+                maxLength={72}
                 accessibilityLabel="New password"
               />
             </View>
@@ -478,6 +483,7 @@ export default function SettingsScreen({ navigation }) {
                 secureTextEntry
                 placeholder="Re-enter password"
                 placeholderTextColor={colors.textMuted}
+                maxLength={72}
                 accessibilityLabel="Confirm password"
               />
             </View>

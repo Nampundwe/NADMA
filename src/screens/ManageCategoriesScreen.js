@@ -28,6 +28,7 @@ import {
   deleteCategory,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import AnimatedCard from '../components/AnimatedCard';
 import { hapticLight, hapticSuccess, hapticWarning, hapticError } from '../utils/haptics';
 import { createStyleSheet } from '../utils/responsive';
@@ -49,6 +50,7 @@ const COLOR_OPTIONS = [
 
 export default function ManageCategoriesScreen({ navigation }) {
   const { colors } = useTheme();
+  const toast = useToast();
   const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -96,15 +98,15 @@ export default function ManageCategoriesScreen({ navigation }) {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Validation', 'Category name is required');
+      toast.error('Category name is required');
       return;
     }
     if (!icon) {
-      Alert.alert('Validation', 'Please select an icon');
+      toast.error('Select an icon');
       return;
     }
     if (!color) {
-      Alert.alert('Validation', 'Please select a color');
+      toast.error('Select a color');
       return;
     }
 
@@ -120,19 +122,19 @@ export default function ManageCategoriesScreen({ navigation }) {
       const result = await updateCategory(editingCategory.id, payload);
       if (result.success) {
         hapticSuccess();
-        Alert.alert('Updated', 'Category updated');
+        toast.success('Category updated');
       } else {
         hapticError();
-        Alert.alert('Error', result.error || 'Failed to update');
+        toast.error(result.error || 'Failed to update');
       }
     } else {
       const result = await addCategory(payload);
       if (result.success) {
         hapticSuccess();
-        Alert.alert('Added', 'Category added');
+        toast.success('Category added');
       } else {
         hapticError();
-        Alert.alert('Error', result.error || 'Failed to add');
+        toast.error(result.error || 'Failed to add');
       }
     }
 
@@ -158,7 +160,7 @@ export default function ManageCategoriesScreen({ navigation }) {
               loadCategories();
             } else {
               hapticError();
-              Alert.alert('Error', result.error || 'Failed to delete');
+              toast.error(result.error || 'Failed to delete');
             }
           },
         },
@@ -204,7 +206,7 @@ export default function ManageCategoriesScreen({ navigation }) {
     </AnimatedCard>
   );
 
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -263,6 +265,7 @@ export default function ManageCategoriesScreen({ navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={name}
                   onChangeText={setName}
+                  maxLength={50}
                 />
               </View>
 
@@ -274,6 +277,7 @@ export default function ManageCategoriesScreen({ navigation }) {
                   placeholderTextColor={colors.textMuted}
                   value={tagline}
                   onChangeText={setTagline}
+                  maxLength={100}
                 />
               </View>
 
@@ -288,6 +292,7 @@ export default function ManageCategoriesScreen({ navigation }) {
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
+                  maxLength={500}
                 />
               </View>
 

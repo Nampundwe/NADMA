@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   StatusBar,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import AnimatedCard from '../components/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +28,7 @@ export default function NotificationsScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   useEffect(() => {
     let unsubscribe;
@@ -63,6 +65,23 @@ export default function NotificationsScreen({ navigation }) {
     setNotifications((prev) =>
       prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
     );
+    try {
+      if (notif.type === 'message') {
+        navigation.navigate('MessagesInbox');
+      } else if (notif.type === 'booking_update' || notif.type === 'new_booking') {
+        navigation.navigate('MyBookings');
+      } else if (notif.type === 'post_comment' || notif.type === 'post_like' || notif.type === 'news') {
+        const rootNav = navigation.getParent()?.getParent();
+        if (rootNav) {
+          rootNav.navigate('Community');
+        }
+      }
+    } catch (e) {
+      try {
+        const rootNav = navigation.getParent()?.getParent();
+        if (rootNav) rootNav.navigate('Home');
+      } catch (e2) {}
+    }
   };
 
   const getIcon = (type) => {
@@ -71,6 +90,9 @@ export default function NotificationsScreen({ navigation }) {
       case 'business_update': return 'storefront';
       case 'new_booking': return 'document-text';
       case 'message': return 'chatbubbles';
+      case 'post_comment': return 'chatbubble';
+      case 'post_like': return 'heart';
+      case 'news': return 'megaphone';
       default: return 'notifications';
     }
   };
@@ -81,6 +103,9 @@ export default function NotificationsScreen({ navigation }) {
       case 'business_update': return '#4CAF50';
       case 'new_booking': return '#1a237e';
       case 'message': return '#2196F3';
+      case 'post_comment': return '#9C27B0';
+      case 'post_like': return '#F44336';
+      case 'news': return '#D32F2F';
       default: return '#6B7280';
     }
   };

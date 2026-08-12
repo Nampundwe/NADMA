@@ -1,11 +1,11 @@
 import React, { useState, useEffect, createContext } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrentUser } from '../data/firebaseStorage';
+import { getCurrentUser, setUserOnlineStatus, logout } from '../data/firebaseStorage';
 import { auth } from '../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { registerForPushNotifications } from '../utils/notifications';
@@ -34,7 +34,6 @@ import ManageCategoriesScreen from '../screens/ManageCategoriesScreen';
 import CommunityScreen from '../screens/CommunityScreen';
 import ProviderDashboardScreen from '../screens/ProviderDashboardScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
-import MapScreen from '../screens/MapScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 const RootStack = createNativeStackNavigator();
@@ -42,6 +41,20 @@ const HomeStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const MessagesStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+function AdminGuard({ children, navigation }) {
+  const { user } = React.useContext(AuthContext);
+  if (!user || (user.role !== 'admin' && user.role !== 'provider')) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0B1437' }}>
+        <Ionicons name="lock-closed" size={48} color="#5B9CF6" />
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 16 }}>Access Denied</Text>
+        <Text style={{ color: '#8892B0', fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40 }}>Only admins and providers can access this screen.</Text>
+      </View>
+    );
+  }
+  return children;
+}
 
 function HomeStackScreen() {
   const { colors } = useTheme();
@@ -99,9 +112,9 @@ function HomeStackScreen() {
         options={{ title: 'Provider Dashboard' }}
       />
       <HomeStack.Screen
-        name="Map"
-        component={MapScreen}
-        options={{ title: 'Service Map' }}
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: 'Notifications' }}
       />
     </HomeStack.Navigator>
   );
@@ -124,9 +137,10 @@ function ProfileStackScreen() {
       />
       <ProfileStack.Screen
         name="Admin"
-        component={AdminScreen}
         options={{ title: 'Admin Panel' }}
-      />
+      >
+        {() => <AdminGuard navigation={{ navigate: () => {} }}><AdminScreen /></AdminGuard>}
+      </ProfileStack.Screen>
       <ProfileStack.Screen
         name="MyBookings"
         component={MyBookingsScreen}
@@ -134,9 +148,10 @@ function ProfileStackScreen() {
       />
       <ProfileStack.Screen
         name="BookingsManager"
-        component={BookingsManagerScreen}
         options={{ title: 'Manage Bookings' }}
-      />
+      >
+        {() => <AdminGuard><BookingsManagerScreen /></AdminGuard>}
+      </ProfileStack.Screen>
       <ProfileStack.Screen
         name="Notifications"
         component={NotificationsScreen}
@@ -154,18 +169,25 @@ function ProfileStackScreen() {
       />
       <ProfileStack.Screen
         name="ManageProviders"
-        component={ManageProvidersScreen}
         options={{ title: 'Manage Providers' }}
-      />
+      >
+        {() => <AdminGuard><ManageProvidersScreen /></AdminGuard>}
+      </ProfileStack.Screen>
       <ProfileStack.Screen
         name="ManageCategories"
-        component={ManageCategoriesScreen}
         options={{ title: 'Manage Categories' }}
-      />
+      >
+        {() => <AdminGuard><ManageCategoriesScreen /></AdminGuard>}
+      </ProfileStack.Screen>
       <ProfileStack.Screen
         name="Settings"
         component={SettingsScreen}
         options={{ headerShown: false }}
+      />
+      <ProfileStack.Screen
+        name="ProviderDashboard"
+        component={ProviderDashboardScreen}
+        options={{ title: 'Provider Dashboard' }}
       />
     </ProfileStack.Navigator>
   );
@@ -182,6 +204,22 @@ function MessagesStackScreen() {
       <MessagesStack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat' }} />
     </MessagesStack.Navigator>
   );
+}
+
+function MainAppWrapper() {
+  return (
+    <ErrorBoundary>
+      <MainTabs />
+    </ErrorBoundary>
+  );
+}
+
+function RootScreen() {
+  const { user } = React.useContext(AuthContext);
+  if (user) {
+    return <MainAppWrapper />;
+  }
+  return <AuthScreen />;
 }
 
 function MainTabs() {
@@ -267,7 +305,33 @@ export default function AppNavigator() {
     registerForPushNotifications().catch(() => {});
   }, []);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    if (!user) return;
+    const appState = AppState.currentState;
+    if (appState === 'active') {
+      setUserOnlineStatus(user.id, true);
+    }
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        setUserOnlineStatus(user.id, true);
+      } else if (nextState === 'background' || nextState === 'inactive') {
+        setUserOnlineStatus(user.id, false);
+      }
+    });
+    const handleUnload = () => setUserOnlineStatus(user.id, false);
+    return () => {
+      sub.remove();
+      setUserOnlineStatus(user.id, false);
+    };
+  }, [user?.id]);
+
+  const handleLogout = async () => {
+    try {
+      if (user) {
+        await setUserOnlineStatus(user.id, false);
+      }
+      await logout();
+    } catch (e) {}
     setUser(null);
   };
 
@@ -293,16 +357,10 @@ export default function AppNavigator() {
   }
 
   return (
-    <AuthContext.Provider value={{ onLogout: handleLogout, onLogin: handleLogin }}>
+    <AuthContext.Provider value={{ onLogout: handleLogout, onLogin: handleLogin, user }}>
       <NavigationContainer>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          {user ? (
-            <RootStack.Screen name="MainApp">
-              {() => <ErrorBoundary><MainTabs /></ErrorBoundary>}
-            </RootStack.Screen>
-          ) : (
-            <RootStack.Screen name="Login" component={AuthScreen} />
-          )}
+          <RootStack.Screen name="Root" component={RootScreen} />
         </RootStack.Navigator>
       </NavigationContainer>
     </AuthContext.Provider>
