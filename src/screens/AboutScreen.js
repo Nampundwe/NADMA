@@ -2,13 +2,12 @@ import React from 'react';
 import {
   View,
   Text,
-
   ScrollView,
-  SafeAreaView,
   Linking,
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { createStyleSheet } from '../utils/responsive';
@@ -33,8 +32,8 @@ export default function AboutScreen() {
         <View style={styles.content}>
           {/* Mission Cards */}
           <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: '#E8EAF6' }]}>
-              <Ionicons name="people" size={28} color="#1a237e" />
+            <View style={[styles.cardIcon, { backgroundColor: colors.infoLight }]}>
+              <Ionicons name="people" size={28} color={colors.primary} />
             </View>
             <Text style={styles.cardTitle}>Our Mission</Text>
             <Text style={styles.cardText}>
@@ -45,8 +44,8 @@ export default function AboutScreen() {
           </View>
 
           <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: '#E8F5E9' }]}>
-              <Ionicons name="shield-checkmark" size={28} color="#4CAF50" />
+            <View style={[styles.cardIcon, { backgroundColor: colors.successLight }]}>
+              <Ionicons name="shield-checkmark" size={28} color={colors.success} />
             </View>
             <Text style={styles.cardTitle}>Verified Providers</Text>
             <Text style={styles.cardText}>
@@ -56,8 +55,8 @@ export default function AboutScreen() {
           </View>
 
           <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: '#FCE4EC' }]}>
-              <Ionicons name="heart" size={28} color="#E91E63" />
+            <View style={[styles.cardIcon, { backgroundColor: colors.dangerLight }]}>
+              <Ionicons name="heart" size={28} color={colors.danger} />
             </View>
             <Text style={styles.cardTitle}>Community First</Text>
             <Text style={styles.cardText}>
@@ -70,23 +69,23 @@ export default function AboutScreen() {
           <View style={styles.featuresCard}>
             <Text style={styles.featuresTitle}>What We Offer</Text>
             <View style={styles.featureRow}>
-              <View style={[styles.featureDot, { backgroundColor: '#2196F3' }]} />
+              <View style={[styles.featureDot, { backgroundColor: colors.info }]} />
               <Text style={styles.featureText}>Browse local service providers</Text>
             </View>
             <View style={styles.featureRow}>
-              <View style={[styles.featureDot, { backgroundColor: '#4CAF50' }]} />
+              <View style={[styles.featureDot, { backgroundColor: colors.success }]} />
               <Text style={styles.featureText}>Book services directly</Text>
             </View>
             <View style={styles.featureRow}>
-              <View style={[styles.featureDot, { backgroundColor: '#FF9800' }]} />
+              <View style={[styles.featureDot, { backgroundColor: colors.warning }]} />
               <Text style={styles.featureText}>Read and write reviews</Text>
             </View>
             <View style={styles.featureRow}>
-              <View style={[styles.featureDot, { backgroundColor: '#E91E63' }]} />
+              <View style={[styles.featureDot, { backgroundColor: colors.danger }]} />
               <Text style={styles.featureText}>Message providers instantly</Text>
             </View>
             <View style={styles.featureRow}>
-              <View style={[styles.featureDot, { backgroundColor: '#9C27B0' }]} />
+              <View style={[styles.featureDot, { backgroundColor: colors.purple }]} />
               <Text style={styles.featureText}>Get real-time notifications</Text>
             </View>
           </View>
@@ -98,34 +97,62 @@ export default function AboutScreen() {
             <TouchableOpacity
               style={styles.contactItem}
               activeOpacity={0.7}
-              onPress={() => Linking.openURL('mailto:support@nadma.app')}
+              onPress={() => Linking.openURL('mailto:munangimuyambangorodwell@gmail.com')}
             >
-              <View style={[styles.contactIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="mail" size={20} color="#2196F3" />
+              <View style={[styles.contactIcon, { backgroundColor: colors.infoLight }]}>
+                <Ionicons name="mail" size={20} color={colors.info} />
               </View>
               <View>
                 <Text style={styles.contactLabel}>Email</Text>
-                <Text style={styles.contactValue}>support@nadma.app</Text>
+                <Text style={styles.contactValue}>munangimuyambangorodwell@gmail.com</Text>
               </View>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.contactItem}
               activeOpacity={0.7}
-              onPress={() => Linking.openURL('tel:+260970000000')}
+              onPress={() => Linking.openURL('tel:0572053023')}
             >
-              <View style={[styles.contactIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="call" size={20} color="#4CAF50" />
+              <View style={[styles.contactIcon, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="phone" size={20} color={colors.success} />
               </View>
               <View>
                 <Text style={styles.contactLabel}>Phone</Text>
-                <Text style={styles.contactValue}>+260 97 000 0000</Text>
+                <Text style={styles.contactValue}>057 205 3023</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.contactItem}
+              activeOpacity={0.7}
+              onPress={() => Linking.openURL('tel:0978195999')}
+            >
+              <View style={[styles.contactIcon, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="phone" size={20} color={colors.success} />
+              </View>
+              <View>
+                <Text style={styles.contactLabel}>Phone</Text>
+                <Text style={styles.contactValue}>097 819 5999</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.contactItem}
+              activeOpacity={0.7}
+              onPress={() => Linking.openURL('tel:0971407244')}
+            >
+              <View style={[styles.contactIcon, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="phone" size={20} color={colors.success} />
+              </View>
+              <View>
+                <Text style={styles.contactLabel}>Phone</Text>
+                <Text style={styles.contactValue}>097 140 7244</Text>
               </View>
             </TouchableOpacity>
 
             <View style={styles.contactItem}>
-              <View style={[styles.contactIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="location" size={20} color="#FF9800" />
+              <View style={[styles.contactIcon, { backgroundColor: colors.warningLight }]}>
+                <Ionicons name="location-on" size={20} color={colors.warning} />
               </View>
               <View>
                 <Text style={styles.contactLabel}>Location</Text>
@@ -171,7 +198,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   headerVersion: {
     fontSize: 13,
-    color: '#C5CAE9',
+    color: colors.textMuted,
   },
   content: {
     padding: 16,

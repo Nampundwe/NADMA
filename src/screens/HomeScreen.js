@@ -5,18 +5,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   TextInput,
   FlatList,
   Image,
   RefreshControl,
   Alert,
   StatusBar,
-  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategories } from '../data/services';
-import { getCurrentUser, updateBookingStatus, getRecommendedProviders, onProvidersSnapshot, onBookingsSnapshot, onBusinessesSnapshot, onNotificationsSnapshot } from '../data/firebaseStorage';
+import { getCurrentUser, updateBookingStatus, getRecommendedProviders, onProvidersSnapshot, onBookingsSnapshot, onNotificationsSnapshot, onUserSnapshot, onPostsSnapshot } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { hapticLight } from '../utils/haptics';
@@ -37,6 +36,7 @@ export default function HomeScreen({ navigation }) {
   const [recommended, setRecommended] = useState([]);
   const [categories, setCategories] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [recentPosts, setRecentPosts] = useState([]);
   const toast = useToast();
 
   useEffect(() => {
@@ -51,21 +51,29 @@ export default function HomeScreen({ navigation }) {
       );
     });
     let unsub3 = null;
+    let unsub4 = null;
+    let unsub5 = null;
     (async () => {
       const u = await getCurrentUser();
       setUser(u);
       if (u) {
+        unsub4 = onUserSnapshot(u.id, (updatedUser) => {
+          if (updatedUser) setUser(updatedUser);
+        });
         const recs = await getRecommendedProviders(u.id);
         setRecommended(recs);
         unsub3 = onNotificationsSnapshot(u.id, (notifs) => {
           setUnreadNotifCount(notifs.filter((n) => !n.read).length);
         });
       }
+      unsub5 = onPostsSnapshot((allPosts) => {
+        setRecentPosts(allPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5));
+      });
       const cats = await getCategories();
       setCategories(cats);
       setLoading(false);
     })();
-    return () => { unsub1(); unsub2(); if (unsub3) unsub3(); };
+    return () => { unsub1(); unsub2(); if (unsub3) unsub3(); if (unsub4) unsub4(); if (unsub5) unsub5(); };
   }, []);
 
   const onRefresh = async () => {
@@ -96,6 +104,20 @@ export default function HomeScreen({ navigation }) {
     setSearchQuery('');
     setSearchResults(null);
     setSearchMode(false);
+  };
+
+  const getTimeAgo = (timestamp) => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now - then;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffMin < 1) return 'Just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return `${Math.floor(diffDay / 7)}w ago`;
   };
 
   const handleApproveBooking = (booking) => {
@@ -156,7 +178,7 @@ export default function HomeScreen({ navigation }) {
       width: 34,
       height: 34,
       borderRadius: 8,
-      backgroundColor: 'rgba(255,255,255,0.2)',
+      backgroundColor: colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -175,13 +197,36 @@ export default function HomeScreen({ navigation }) {
       width: 38,
       height: 38,
       borderRadius: 19,
-      backgroundColor: 'rgba(255,255,255,0.15)',
+      backgroundColor: colors.glassBg,
       justifyContent: 'center',
       alignItems: 'center',
     },
+    profileBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      overflow: 'hidden',
+      borderWidth: 2,
+      borderColor: colors.primary,
+    },
+    profileBtnCircle: {
+      flex: 1,
+      backgroundColor: colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    profileBtnImage: {
+      width: '100%',
+      height: '100%',
+    },
+    profileBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#fff',
+    },
     greeting: {
       fontSize: 14,
-      color: 'rgba(255,255,255,0.6)',
+      color: colors.textSecondary,
       paddingHorizontal: 20,
       marginBottom: 2,
     },
@@ -195,7 +240,7 @@ export default function HomeScreen({ navigation }) {
     searchBarHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(255,255,255,0.12)',
+      backgroundColor: colors.white,
       marginHorizontal: 20,
       borderRadius: 12,
       paddingHorizontal: 14,
@@ -205,7 +250,7 @@ export default function HomeScreen({ navigation }) {
     searchBarPlaceholder: {
       flex: 1,
       fontSize: 14,
-      color: 'rgba(255,255,255,0.45)',
+      color: colors.textMuted,
     },
     headerStats: {
       flexDirection: 'row',
@@ -226,11 +271,11 @@ export default function HomeScreen({ navigation }) {
     headerStatNumber: {
       fontSize: 18,
       fontWeight: '800',
-      color: colors.headerText,
+      color: colors.primary,
     },
     headerStatLabel: {
       fontSize: 10,
-      color: 'rgba(255,255,255,0.5)',
+      color: colors.textSecondary,
       marginTop: 1,
       fontWeight: '500',
     },
@@ -241,7 +286,7 @@ export default function HomeScreen({ navigation }) {
       paddingBottom: 0,
     },
     registerBanner: {
-      backgroundColor: '#4CAF50',
+      backgroundColor: colors.success,
       flexDirection: 'row',
       alignItems: 'center',
       padding: 16,
@@ -279,7 +324,7 @@ export default function HomeScreen({ navigation }) {
       alignItems: 'center',
     },
     pendingBookingsSection: {
-      backgroundColor: colors.card,
+      backgroundColor: colors.cardSolid,
       borderRadius: 16,
       padding: 16,
     },
@@ -298,7 +343,7 @@ export default function HomeScreen({ navigation }) {
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: '#FFF3E0',
+      backgroundColor: colors.warning,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -308,7 +353,7 @@ export default function HomeScreen({ navigation }) {
       color: colors.text,
     },
     pendingCountBadge: {
-      backgroundColor: '#FF9800',
+      backgroundColor: colors.warning,
       borderRadius: 10,
       minWidth: 22,
       height: 22,
@@ -335,7 +380,7 @@ export default function HomeScreen({ navigation }) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: colors.borderLight,
+      backgroundColor: colors.glassBg,
       borderRadius: 12,
       padding: 12,
       marginBottom: 8,
@@ -390,7 +435,7 @@ export default function HomeScreen({ navigation }) {
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: '#4CAF50',
+      backgroundColor: colors.success,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -398,13 +443,12 @@ export default function HomeScreen({ navigation }) {
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: '#F44336',
+      backgroundColor: colors.danger,
       justifyContent: 'center',
       alignItems: 'center',
     },
 
     categoriesSection: {
-      paddingHorizontal: 16,
       paddingTop: 16,
     },
     sectionHeader: {
@@ -412,6 +456,7 @@ export default function HomeScreen({ navigation }) {
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 14,
+      paddingHorizontal: 16,
     },
     sectionTitle: {
       fontSize: 18,
@@ -428,62 +473,64 @@ export default function HomeScreen({ navigation }) {
       color: colors.primary,
       fontWeight: '600',
     },
-    adBannersContainer: {
-      gap: 10,
+    categoriesScroll: {
+      paddingLeft: 16,
+      paddingRight: 8,
+      gap: 12,
     },
-    adBannerCard: {
-      height: 88,
-      borderRadius: 14,
+    categoryCard: {
+      width: 200,
+      height: 110,
+      borderRadius: 16,
       overflow: 'hidden',
       position: 'relative',
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 5,
     },
-    adBannerImage: {
+    categoryImage: {
       width: '100%',
       height: '100%',
     },
-    adBannerOverlay: {
+    categoryOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.4)',
+      backgroundColor: 'rgba(0,0,0,0.45)',
     },
-    adBannerContent: {
+    categoryContent: {
       position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
+      padding: 12,
+    },
+    categoryBadge: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      backgroundColor: 'rgba(255,255,255,0.22)',
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: 14,
+      gap: 4,
     },
-    adBannerIcon: {
-      width: 0,
-      height: 0,
-    },
-    adBannerText: {
-      flex: 1,
-    },
-    adBannerName: {
-      fontSize: 15,
+    categoryBadgeText: {
+      fontSize: 11,
       fontWeight: '700',
       color: '#fff',
     },
-    adBannerTagline: {
-      fontSize: 11,
-      color: 'rgba(255,255,255,0.7)',
-      marginTop: 1,
-    },
-    adBannerRight: {
-      alignItems: 'flex-end',
-      marginLeft: 12,
-    },
-    adBannerCount: {
-      fontSize: 18,
-      fontWeight: '800',
+    categoryName: {
+      fontSize: 15,
+      fontWeight: '700',
       color: '#fff',
+      marginBottom: 2,
     },
-    adBannerCountLabel: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.6)',
+    categoryTagline: {
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.75)',
     },
 
     // Popular Providers
@@ -542,6 +589,146 @@ export default function HomeScreen({ navigation }) {
       fontSize: 11,
       color: 'rgba(255,255,255,0.8)',
     },
+    popularPrice: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.primary,
+      marginTop: 4,
+    },
+
+    // Featured Section
+    featuredSection: {
+      paddingBottom: 4,
+    },
+    featuredScroll: {
+      paddingLeft: 16,
+      paddingRight: 8,
+      gap: 12,
+    },
+    featuredCard: {
+      width: 200,
+      backgroundColor: colors.glassBg,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      overflow: 'hidden',
+    },
+    featuredImageWrap: {
+      width: '100%',
+      height: 120,
+      position: 'relative',
+    },
+    featuredImage: {
+      width: '100%',
+      height: '100%',
+    },
+    featuredCategoryTag: {
+      position: 'absolute',
+      top: 8,
+      left: 8,
+      backgroundColor: colors.primary,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    featuredCategoryText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: '#fff',
+    },
+    featuredInfo: {
+      padding: 12,
+    },
+    featuredName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 4,
+    },
+    featuredRating: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 6,
+    },
+    featuredRatingText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    featuredPrice: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.primary,
+    },
+
+    // Recent Activity
+    activitySection: {
+      paddingBottom: 4,
+      paddingHorizontal: 16,
+    },
+    activityCard: {
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+    },
+    activityHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    activityAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 10,
+    },
+    activityAvatarText: {
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    activityInfo: {
+      flex: 1,
+    },
+    activityUser: {
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    activityTime: {
+      fontSize: 11,
+      marginTop: 1,
+    },
+    activityCategory: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+    },
+    activityCategoryText: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    activityTitle: {
+      fontSize: 14,
+      fontWeight: '500',
+      marginBottom: 8,
+      lineHeight: 20,
+    },
+    activityFooter: {
+      flexDirection: 'row',
+      gap: 14,
+    },
+    activityStat: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    activityStatText: {
+      fontSize: 12,
+    },
 
     // About
     aboutSection: {
@@ -586,7 +773,7 @@ export default function HomeScreen({ navigation }) {
       flexDirection: 'row',
       alignItems: 'center',
       padding: 12,
-      backgroundColor: colors.card,
+      backgroundColor: colors.cardSolid,
       shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.06,
@@ -600,7 +787,7 @@ export default function HomeScreen({ navigation }) {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.borderLight,
+      backgroundColor: colors.glassBg,
       borderRadius: 10,
       paddingHorizontal: 12,
       marginLeft: 8,
@@ -624,17 +811,14 @@ export default function HomeScreen({ navigation }) {
     },
     searchResultCard: {
       flexDirection: 'row',
-      backgroundColor: colors.card,
+      backgroundColor: colors.glassBg,
       borderRadius: 14,
       marginBottom: 10,
       overflow: 'hidden',
       alignItems: 'center',
       padding: 12,
-      shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 4,
-      elevation: 2,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
     },
     searchResultImage: {
       width: 56,
@@ -674,7 +858,7 @@ export default function HomeScreen({ navigation }) {
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: colors.borderLight,
+      backgroundColor: colors.glassBg,
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: 16,
@@ -695,11 +879,9 @@ export default function HomeScreen({ navigation }) {
       padding: 14,
       borderRadius: 14,
       alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 6,
-      elevation: 2,
+      backgroundColor: colors.glassBg,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
     },
     recAvatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
     recAvatarText: { fontSize: 20, fontWeight: 'bold' },
@@ -726,13 +908,13 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.searchResultName}>{item.name}</Text>
         <Text style={styles.searchResultCategory}>{item.category}</Text>
         <View style={styles.searchResultRating}>
-          <Ionicons name="star" size={14} color="#FFD700" />
+                  <Ionicons name="star" size={14} color={colors.warning} />
           <Text style={styles.searchResultRatingText}>
             {item.rating > 0 ? item.rating : 'New'}
           </Text>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+      <Ionicons name="chevron-right" size={20} color={colors.textMuted} />
     </TouchableOpacity>
   );
 
@@ -754,7 +936,7 @@ export default function HomeScreen({ navigation }) {
               <Ionicons name="arrow-back" size={22} color={colors.text} />
             </TouchableOpacity>
             <View style={styles.searchBar}>
-              <Ionicons name="search" size={18} color={colors.textMuted} />
+              <Ionicons name="search-outline" size={18} color={colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search services..."
@@ -814,16 +996,35 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.brandText}>Nadma</Text>
             </View>
             <View style={styles.headerActions}>
+              {user && (
+                <TouchableOpacity
+                  style={styles.profileBtn}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('PublicProfile', { userId: user.id, userName: user.name })}
+                  accessibilityLabel={`View ${user.name}'s profile`}
+                  accessibilityRole="button"
+                >
+                  {user.profileImage ? (
+                    <Image source={{ uri: user.profileImage }} style={styles.profileBtnImage} />
+                  ) : (
+                    <View style={styles.profileBtnCircle}>
+                      <Text style={styles.profileBtnText}>
+                        {user.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.headerIconBtn}
                 activeOpacity={0.7}
-                onPress={() => navigation.navigate('Notifications')}
+                onPress={() => navigation.navigate('notifications')}
                 accessibilityLabel="Notifications"
                 accessibilityRole="button"
               >
                 <Ionicons name="notifications-outline" size={19} color="#fff" />
                 {unreadNotifCount > 0 && (
-                  <View style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
+                  <View style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.danger, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
                     <Text style={{ fontSize: 9, fontWeight: '700', color: '#fff' }}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</Text>
                   </View>
                 )}
@@ -836,7 +1037,7 @@ export default function HomeScreen({ navigation }) {
                   accessibilityLabel="Admin panel"
                   accessibilityRole="button"
                 >
-                  <Ionicons name="shield-checkmark-outline" size={19} color="#fff" />
+                  <Ionicons name="shield-checkmark" size={19} color="#fff" />
                 </TouchableOpacity>
               )}
             </View>
@@ -854,7 +1055,7 @@ export default function HomeScreen({ navigation }) {
             accessibilityLabel="Search services"
             accessibilityRole="button"
           >
-            <Ionicons name="search" size={17} color="rgba(255,255,255,0.4)" />
+            <Ionicons name="search-outline" size={17} color={colors.textMuted} />
             <Text style={styles.searchBarPlaceholder}>Search services or providers...</Text>
           </TouchableOpacity>
 
@@ -870,7 +1071,50 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Admin Banners */}
+        {/* Service Categories */}
+        <View style={styles.categoriesSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Services</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('Services', { categoryName: categories[0]?.name })}
+              accessibilityLabel="View all services"
+              accessibilityRole="button"
+            >
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoriesScroll}
+          >
+            {categories.map((category) => {
+              const count = getProviderCount(category.name);
+              return (
+                <AnimatedCard
+                  key={category.id}
+                  style={styles.categoryCard}
+                  activeOpacity={0.85}
+                  onPress={() => navigation.navigate('Services', { categoryName: category.name })}
+                  accessibilityLabel={category.name}
+                  accessibilityRole="button"
+                >
+                  <Image source={{ uri: category.image }} style={styles.categoryImage} />
+                  <View style={styles.categoryOverlay} />
+                  <View style={styles.categoryBadge}>
+                    <Ionicons name="business" size={11} color="#fff" />
+                    <Text style={styles.categoryBadgeText}>{count}</Text>
+                  </View>
+                  <View style={styles.categoryContent}>
+                    <Text style={styles.categoryName} numberOfLines={1}>{category.name}</Text>
+                    <Text style={styles.categoryTagline} numberOfLines={1}>{category.tagline}</Text>
+                  </View>
+                </AnimatedCard>
+              );
+            })}
+          </ScrollView>
+        </View>
         {user && user.role === 'admin' && (
           <View style={styles.adminSection}>
             <TouchableOpacity
@@ -888,7 +1132,7 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.registerBannerSubtitle}>Add a new service listing</Text>
               </View>
               <View style={styles.bannerArrow}>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
+                <Ionicons name="chevron-right" size={18} color="#fff" />
               </View>
             </TouchableOpacity>
 
@@ -897,7 +1141,7 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.pendingHeader}>
                   <View style={styles.pendingHeaderLeft}>
                     <View style={styles.pendingIconCircle}>
-                      <Ionicons name="time" size={16} color="#FF9800" />
+                      <Ionicons name="schedule" size={16} color={colors.warning} />
                     </View>
                     <Text style={styles.pendingTitle}>Pending Bookings</Text>
                     <View style={styles.pendingCountBadge}>
@@ -911,7 +1155,7 @@ export default function HomeScreen({ navigation }) {
                     accessibilityRole="button"
                   >
                     <Text style={styles.viewAllText}>View All</Text>
-                    <Ionicons name="arrow-forward" size={12} color={colors.primary} />
+                    <Ionicons name="arrow-forward-outline" size={12} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
                 {pendingBookings.slice(0, 3).map((booking) => (
@@ -926,7 +1170,7 @@ export default function HomeScreen({ navigation }) {
                         <Text style={styles.bookingUser}>{booking.userName}</Text>
                         <Text style={styles.bookingService}>{booking.businessName}</Text>
                         <View style={styles.bookingMeta}>
-                          <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+                          <Ionicons name="calendar" size={11} color={colors.textMuted} />
                           <Text style={styles.bookingTime}>{booking.date} at {booking.time}</Text>
                         </View>
                       </View>
@@ -939,7 +1183,7 @@ export default function HomeScreen({ navigation }) {
                         accessibilityLabel={`Approve booking by ${booking.userName}`}
                         accessibilityRole="button"
                       >
-                        <Ionicons name="checkmark" size={16} color="#fff" />
+                        <Ionicons name="check" size={16} color="#fff" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.rejectBtn}
@@ -962,7 +1206,7 @@ export default function HomeScreen({ navigation }) {
         {user && user.role === 'provider' && (
           <View style={styles.section}>
             <TouchableOpacity
-              style={[styles.registerBanner, { backgroundColor: '#1B5E20' }]}
+              style={[styles.registerBanner, { backgroundColor: colors.success }]}
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Profile', { screen: 'ProviderDashboard' })}
               accessibilityLabel="My business dashboard"
@@ -976,7 +1220,7 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.registerBannerSubtitle}>View bookings, reviews, and stats</Text>
               </View>
               <View style={styles.bannerArrow}>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
+                <Ionicons name="chevron-right" size={18} color="#fff" />
               </View>
             </TouchableOpacity>
           </View>
@@ -1009,7 +1253,7 @@ export default function HomeScreen({ navigation }) {
                   <Text style={[styles.recName, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
                   <Text style={[styles.recCategory, { color: colors.textSecondary }]}>{item.category}</Text>
                   <View style={styles.recRating}>
-                    <Ionicons name="star" size={11} color="#FFD700" />
+                    <Ionicons name="star" size={11} color={colors.warning} />
                     <Text style={[styles.recRatingText, { color: colors.textSecondary }]}>{item.rating?.toFixed(1) || 'New'}</Text>
                   </View>
                 </TouchableOpacity>
@@ -1018,70 +1262,126 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* Service Categories */}
-        <View style={styles.categoriesSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Services</Text>
-          </View>
-          <View style={styles.adBannersContainer}>
-            {categories.map((category) => {
-              const count = getProviderCount(category.name);
-              return (
-                <AnimatedCard
-                  key={category.id}
-                  style={styles.adBannerCard}
-                  activeOpacity={0.85}
-                  onPress={() => navigation.navigate('Services', { categoryName: category.name })}
-                  accessibilityLabel={category.name}
-                  accessibilityRole="button"
-                >
-                  <Image source={{ uri: category.image }} style={styles.adBannerImage} />
-                  <View style={styles.adBannerOverlay} />
-                  <View style={styles.adBannerContent}>
-                    <View style={styles.adBannerText}>
-                      <Text style={styles.adBannerName}>{category.name}</Text>
-                      <Text style={styles.adBannerTagline} numberOfLines={1}>{category.tagline}</Text>
-                    </View>
-                    <View style={styles.adBannerRight}>
-                      <Text style={styles.adBannerCount}>{count}</Text>
-                      <Text style={styles.adBannerCountLabel}>providers</Text>
-                    </View>
-                  </View>
-                </AnimatedCard>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Popular Providers */}
+        {/* Featured Service Providers */}
         {registeredBusinesses.length > 0 && (
-          <View style={styles.popularSection}>
+          <View style={styles.featuredSection}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Top Providers</Text>
+              <Text style={styles.sectionTitle}>Featured Service Providers</Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('Services', { categoryName: categories[0]?.name })}
+                accessibilityLabel="View all providers"
+                accessibilityRole="button"
+              >
+                <Text style={styles.seeAllText}>See All</Text>
+              </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularScroll}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredScroll}>
               {registeredBusinesses.slice(0, 6).map((business) => (
                 <AnimatedCard
                   key={business.id}
-                  style={styles.popularCard}
-                  activeOpacity={0.8}
+                  style={styles.featuredCard}
+                  activeOpacity={0.85}
                   onPress={() => navigation.navigate('ServiceDetail', { service: business })}
                   accessibilityLabel={business.name}
                   accessibilityRole="button"
                 >
-                  <Image source={{ uri: business.image }} style={styles.popularImage} />
-                  <View style={styles.popularOverlay} />
-                  <View style={styles.popularInfo}>
-                    <View style={styles.popularRating}>
-                      <Ionicons name="star" size={11} color="#FFD700" />
-                      <Text style={styles.popularRatingText}>{business.rating || 'New'}</Text>
+                  <View style={styles.featuredImageWrap}>
+                    <Image source={{ uri: business.image }} style={styles.featuredImage} />
+                    <View style={styles.featuredCategoryTag}>
+                      <Text style={styles.featuredCategoryText}>{business.category}</Text>
                     </View>
-                    <Text style={styles.popularName} numberOfLines={1}>{business.name}</Text>
-                    <Text style={styles.popularCategory}>{business.category}</Text>
+                  </View>
+                  <View style={styles.featuredInfo}>
+                    <Text style={styles.featuredName} numberOfLines={1}>{business.name}</Text>
+                    <View style={styles.featuredRating}>
+                      <Ionicons name="star" size={12} color={colors.warning} />
+                      <Text style={styles.featuredRatingText}>{business.rating || 'New'}</Text>
+                    </View>
+                    {business.price && (
+                      <Text style={styles.featuredPrice}>{business.price}</Text>
+                    )}
                   </View>
                 </AnimatedCard>
               ))}
             </ScrollView>
+          </View>
+        )}
+
+        {/* Recent Activity */}
+        {recentPosts.length > 0 && (
+          <View style={styles.activitySection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recent Activity</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Community')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sectionLink, { color: colors.primary }]}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            {recentPosts.map((post) => {
+              const reactions = post.reactions || {};
+              const totalReactions = Object.keys(reactions).length;
+              const reactionCounts = {};
+              Object.values(reactions).forEach((r) => { reactionCounts[r] = (reactionCounts[r] || 0) + 1; });
+              return (
+                <TouchableOpacity
+                  key={post.id}
+                  style={[styles.activityCard, { backgroundColor: colors.card }]}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
+                >
+                  <View style={styles.activityHeader}>
+                    <View style={[styles.activityAvatar, { backgroundColor: colors.primary + '20' }]}>
+                      {post.userProfileImage ? (
+                        <Image source={{ uri: post.userProfileImage }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                      ) : (
+                        <Text style={[styles.activityAvatarText, { color: colors.primary }]}>
+                          {post.userName ? post.userName.charAt(0).toUpperCase() : ''}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.activityInfo}>
+                      <Text style={[styles.activityUser, { color: colors.text }]} numberOfLines={1}>
+                        {post.userName}
+                      </Text>
+                      <Text style={[styles.activityTime, { color: colors.textMuted }]}>
+                        {getTimeAgo(post.createdAt)}
+                      </Text>
+                    </View>
+                    {post.category && (
+                      <View style={[styles.activityCategory, { backgroundColor: colors.primaryLight }]}>
+                        <Text style={[styles.activityCategoryText, { color: colors.primary }]}>{post.category}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.activityTitle, { color: colors.text }]} numberOfLines={1}>
+                    {post.title || post.description?.substring(0, 60)}
+                  </Text>
+                  <View style={styles.activityFooter}>
+                    <View style={styles.activityStat}>
+                      <Ionicons name="chatbubble-outline" size={14} color={colors.textMuted} />
+                      <Text style={[styles.activityStatText, { color: colors.textMuted }]}>
+                        {post.commentCount || 0}
+                      </Text>
+                    </View>
+                    {totalReactions > 0 && (
+                      <View style={styles.activityStat}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          {Object.entries(reactionCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([emoji, count]) => (
+                            <Text key={emoji} style={{ fontSize: 12 }}>{emoji}</Text>
+                          ))}
+                        </View>
+                        <Text style={[styles.activityStatText, { color: colors.textMuted }]}>
+                          {totalReactions}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 

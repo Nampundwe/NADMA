@@ -14,16 +14,14 @@
     "android": {
       "package": "com.nadma.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0F1923"
       }
     },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1B2559"
+      "backgroundColor": "#0F1923"
     },
     "web": {
       "favicon": "./assets/favicon.png"

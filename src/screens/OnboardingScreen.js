@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
   Dimensions,
   Animated,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
@@ -105,7 +105,7 @@ export default function OnboardingScreen({ onComplete }) {
   const isLast = currentIndex === slides.length - 1;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={colors.statusBar} backgroundColor={colors.bg} />
       <FlatList
         ref={flatListRef}
@@ -155,12 +155,12 @@ export default function OnboardingScreen({ onComplete }) {
               onPress={handleNext}
             >
               <Text style={styles.nextText}>Next</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
+              <Ionicons name="arrow-forward-outline" size={18} color="#fff" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
           )}
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

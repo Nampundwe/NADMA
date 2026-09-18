@@ -2,20 +2,18 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AnimatedCard from '../components/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import {
   markNotificationRead,
-  markAllNotificationsRead,
   getCurrentUser,
   onNotificationsSnapshot,
 } from '../data/firebaseStorage';
@@ -67,19 +65,53 @@ export default function NotificationsScreen({ navigation }) {
     );
     try {
       if (notif.type === 'message') {
-        navigation.navigate('MessagesInbox');
+        navigation.navigate('Chat', {
+          receiverId: notif.senderId,
+          receiverName: notif.senderName || 'User',
+          businessId: notif.businessId || null,
+          businessName: notif.businessName || null,
+          conversationType: notif.conversationType || 'user',
+        });
       } else if (notif.type === 'booking_update' || notif.type === 'new_booking') {
         navigation.navigate('MyBookings');
-      } else if (notif.type === 'post_comment' || notif.type === 'post_like' || notif.type === 'news') {
-        const rootNav = navigation.getParent()?.getParent();
-        if (rootNav) {
-          rootNav.navigate('Community');
+      } else if (notif.type === 'post_comment' || notif.type === 'post_like' || notif.type === 'post_reaction' || notif.type === 'repost') {
+        if (notif.postId) {
+          navigation.navigate('PostDetail', { postId: notif.postId });
+        } else {
+          const tabNav = navigation.getParent()?.getParent();
+          if (tabNav) tabNav.navigate('Community');
         }
+      } else if (notif.type === 'news' || notif.type === 'post') {
+        if (notif.postId) {
+          navigation.navigate('PostDetail', { postId: notif.postId });
+        } else {
+          const tabNav = navigation.getParent()?.getParent();
+          if (tabNav) tabNav.navigate('Community');
+        }
+      } else if (notif.type === 'follow') {
+        if (notif.senderId) {
+          navigation.navigate('PublicProfile', { userId: notif.senderId, userName: notif.senderName });
+        } else {
+          const tabNav = navigation.getParent()?.getParent();
+          if (tabNav) tabNav.navigate('Community');
+        }
+      } else if (notif.type === 'business_update') {
+        navigation.navigate('Home');
+      } else if (notif.type === 'new_report') {
+        const tabNav = navigation.getParent()?.getParent();
+        if (tabNav) {
+          tabNav.navigate('Profile');
+          setTimeout(() => {
+            try { navigation.navigate('Admin'); } catch (e) {}
+          }, 300);
+        }
+      } else {
+        const tabNav = navigation.getParent()?.getParent();
+        if (tabNav) tabNav.navigate('Home');
       }
     } catch (e) {
       try {
-        const rootNav = navigation.getParent()?.getParent();
-        if (rootNav) rootNav.navigate('Home');
+        navigation.navigate('Home');
       } catch (e2) {}
     }
   };
@@ -87,11 +119,14 @@ export default function NotificationsScreen({ navigation }) {
   const getIcon = (type) => {
     switch (type) {
       case 'booking_update': return 'calendar';
-      case 'business_update': return 'storefront';
+      case 'business_update': return 'business';
       case 'new_booking': return 'document-text';
       case 'message': return 'chatbubbles';
       case 'post_comment': return 'chatbubble';
       case 'post_like': return 'heart';
+      case 'follow': return 'person-add';
+      case 'repost': return 'repeat';
+      case 'post': return 'document-text';
       case 'news': return 'megaphone';
       default: return 'notifications';
     }
@@ -99,19 +134,30 @@ export default function NotificationsScreen({ navigation }) {
 
   const getColor = (type) => {
     switch (type) {
-      case 'booking_update': return '#FF9800';
-      case 'business_update': return '#4CAF50';
-      case 'new_booking': return '#1a237e';
-      case 'message': return '#2196F3';
-      case 'post_comment': return '#9C27B0';
-      case 'post_like': return '#F44336';
-      case 'news': return '#D32F2F';
-      default: return '#6B7280';
+      case 'booking_update': return colors.warning;
+      case 'business_update': return colors.success;
+      case 'new_booking': return colors.primary;
+      case 'message': return colors.info;
+      case 'post_comment': return colors.purple;
+      case 'post_like': return colors.danger;
+      case 'follow': return colors.info;
+      case 'repost': return colors.success;
+      case 'post': return colors.warning;
+      case 'news': return colors.danger;
+      default: return colors.textSecondary;
     }
   };
 
   const renderNotification = ({ item }) => {
     const color = getColor(item.type);
+    const ts = item.timestamp
+      ? new Date(item.timestamp)
+      : item.createdAt?.seconds
+        ? new Date(item.createdAt.seconds * 1000)
+        : null;
+    const timeStr = ts && !isNaN(ts.getTime())
+      ? `${ts.toLocaleDateString()} at ${ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : '';
     return (
       <AnimatedCard
         style={[styles.notifCard, !item.read && styles.unreadCard]}
@@ -128,10 +174,7 @@ export default function NotificationsScreen({ navigation }) {
             {item.title}
           </Text>
           <Text style={styles.notifMessage}>{item.message}</Text>
-          <Text style={styles.notifTime}>
-            {new Date(item.timestamp).toLocaleDateString()} at{' '}
-            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
+          {timeStr ? <Text style={styles.notifTime}>{timeStr}</Text> : null}
         </View>
         {!item.read && <View style={styles.unreadDot} />}
       </AnimatedCard>
@@ -152,7 +195,10 @@ export default function NotificationsScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colors.statusBar} backgroundColor={colors.headerBg} />
       <View style={styles.header}>
-        <View>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color={colors.headerText} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Notifications</Text>
           <Text style={styles.headerSubtitle}>
             {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
@@ -160,7 +206,7 @@ export default function NotificationsScreen({ navigation }) {
         </View>
         {unreadCount > 0 && (
           <TouchableOpacity style={styles.markAllBtn} onPress={handleMarkAllRead} accessibilityLabel="Mark all as read" accessibilityRole="button">
-            <Ionicons name="checkmark-done" size={18} color="#fff" />
+            <Ionicons name="checkmark-done" size={18} color={colors.white} />
             <Text style={styles.markAllBtnText}>Mark all read</Text>
           </TouchableOpacity>
         )}
@@ -177,7 +223,7 @@ export default function NotificationsScreen({ navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
-              <Ionicons name="notifications-off-outline" size={40} color="#C4C4C4" />
+              <Ionicons name="notifications-off-outline" size={40} color={colors.textMuted} />
             </View>
             <Text style={styles.emptyText}>No notifications</Text>
             <Text style={styles.emptySubtext}>You're all caught up!</Text>
@@ -211,7 +257,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#C5CAE9',
+    color: colors.textMuted,
     marginTop: 2,
   },
   markAllBtn: {
@@ -225,7 +271,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   markAllBtnText: {
     fontSize: 13,
-    color: '#fff',
+    color: colors.white,
     fontWeight: '600',
   },
   list: {
@@ -246,9 +292,9 @@ const getStyles = (colors) => createStyleSheet({
     elevation: 2,
   },
   unreadCard: {
-    backgroundColor: '#EDE7F6',
+    backgroundColor: colors.purpleLight,
     borderLeftWidth: 3,
-    borderLeftColor: '#1a237e',
+    borderLeftColor: colors.primary,
   },
   iconCircle: {
     width: 48,
@@ -268,7 +314,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   unreadTitle: {
     fontWeight: 'bold',
-    color: '#1a237e',
+    color: colors.primary,
   },
   notifMessage: {
     fontSize: 13,
@@ -285,7 +331,7 @@ const getStyles = (colors) => createStyleSheet({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
     marginLeft: 8,
   },
   emptyContainer: {

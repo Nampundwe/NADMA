@@ -2,10 +2,8 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   Alert,
   Modal,
@@ -15,12 +13,13 @@ import {
   LayoutAnimation,
   UIManager,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
   getAllCategories,
   addCategory,
@@ -35,12 +34,12 @@ import { createStyleSheet } from '../utils/responsive';
 
 const ICON_OPTIONS = [
   'water-outline', 'flash-outline', 'hammer-outline', 'brush-outline',
-  'sparkles', 'leaf-outline', 'construct-outline', 'car-outline',
-  'cut-outline', 'bicycle-outline', 'fitness-outline', 'restaurant-outline',
-  'medical-outline', 'school-outline', 'home-outline', 'globe-outline',
-  'shield-checkmark-outline', 'megaphone-outline', 'storefront-outline',
-  'briefcase-outline', 'code-outline', 'film-outline', 'musical-notes-outline',
-  'camera-outline', 'book-outline', 'paw-outline', 'airplane-outline',
+  'sparkles', 'leaf-outline', 'construction', 'directions-car',
+  'content-cut', 'directions-bike', 'fitness-center', 'restaurant',
+  'local-hospital', 'school', 'home', 'public',
+  'verified-user', 'campaign', 'store',
+  'work', 'code', 'movie', 'music-note',
+  'camera', 'book', 'pets', 'flight',
 ];
 
 const COLOR_OPTIONS = [
@@ -48,7 +47,8 @@ const COLOR_OPTIONS = [
   '#8BC34A', '#F44336', '#00BCD4', '#FF5722', '#607D8B',
 ];
 
-export default function ManageCategoriesScreen({ navigation }) {
+export default function ManageCategoriesScreen() {
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const toast = useToast();
   const [categories, setCategories] = useState([]);
@@ -193,7 +193,7 @@ export default function ManageCategoriesScreen({ navigation }) {
             onPress={() => openEditModal(item)}
             style={styles.actionBtn}
           >
-            <Ionicons name="create" size={18} color={colors.primary} />
+            <Ionicons name="pencil" size={18} color={colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleDelete(item)}
@@ -243,7 +243,7 @@ export default function ManageCategoriesScreen({ navigation }) {
 
       <Modal visible={showModal} animationType="slide" transparent>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
@@ -338,7 +338,7 @@ export default function ManageCategoriesScreen({ navigation }) {
                         onPress={() => { hapticLight(); setColor(c); }}
                       >
                         {selected && (
-                          <Ionicons name="checkmark" size={18} color="#fff" />
+                          <Ionicons name="check" size={18} color="#fff" />
                         )}
                       </TouchableOpacity>
                     );

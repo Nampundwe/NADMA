@@ -32,14 +32,20 @@ import FavoritesScreen from '../screens/FavoritesScreen';
 import ManageProvidersScreen from '../screens/ManageProvidersScreen';
 import ManageCategoriesScreen from '../screens/ManageCategoriesScreen';
 import CommunityScreen from '../screens/CommunityScreen';
+import PublicProfileScreen from '../screens/PublicProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 import ProviderDashboardScreen from '../screens/ProviderDashboardScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
+import OnboardingProfileScreen from '../screens/OnboardingProfileScreen';
+import PostDetailScreen from '../screens/PostDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 const RootStack = createNativeStackNavigator();
+const AuthStack = createNativeStackNavigator();
 const HomeStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const MessagesStack = createNativeStackNavigator();
+const CommunityStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function AdminGuard({ children, navigation }) {
@@ -47,7 +53,7 @@ function AdminGuard({ children, navigation }) {
   if (!user || (user.role !== 'admin' && user.role !== 'provider')) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0B1437' }}>
-        <Ionicons name="lock-closed" size={48} color="#5B9CF6" />
+        <Ionicons name="lock" size={48} color="#5B9CF6" />
         <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 16 }}>Access Denied</Text>
         <Text style={{ color: '#8892B0', fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40 }}>Only admins and providers can access this screen.</Text>
       </View>
@@ -74,12 +80,12 @@ function HomeStackScreen() {
       <HomeStack.Screen
         name="Services"
         component={ServicesScreen}
-        options={({ route }) => ({ title: route.params.categoryName })}
+        options={({ route }) => ({ title: route.params.categoryName, headerShown: false })}
       />
       <HomeStack.Screen
         name="ServiceDetail"
         component={ServiceDetailScreen}
-        options={{ title: 'Service Details' }}
+        options={{ title: 'Service Details', headerShown: false }}
       />
       <HomeStack.Screen
         name="Register"
@@ -94,27 +100,42 @@ function HomeStackScreen() {
       <HomeStack.Screen
         name="Chat"
         component={ChatScreen}
-        options={{ title: 'Chat' }}
+        options={{ title: 'Chat', headerShown: false }}
       />
       <HomeStack.Screen
         name="MessagesInbox"
         component={MessagesInbox}
-        options={{ title: 'Messages' }}
+        options={{ title: 'Messages', headerShown: false }}
       />
       <HomeStack.Screen
         name="Community"
         component={CommunityScreen}
-        options={{ title: 'Community Board' }}
+        options={{ title: 'Community Board', headerShown: false }}
+      />
+      <HomeStack.Screen
+        name="PostDetail"
+        component={PostDetailScreen}
+        options={{ title: 'Post', headerShown: false }}
       />
       <HomeStack.Screen
         name="ProviderDashboard"
         component={ProviderDashboardScreen}
-        options={{ title: 'Provider Dashboard' }}
+        options={{ title: 'Provider Dashboard', headerShown: false }}
       />
       <HomeStack.Screen
-        name="Notifications"
+        name="notifications"
         component={NotificationsScreen}
-        options={{ title: 'Notifications' }}
+        options={{ title: 'Notifications', headerShown: false }}
+      />
+      <HomeStack.Screen
+        name="PublicProfile"
+        component={PublicProfileScreen}
+        options={({ route }) => ({ title: route.params?.userName || 'Profile', headerShown: false })}
+      />
+      <HomeStack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{ title: 'Edit Professional Profile', headerShown: false }}
       />
     </HomeStack.Navigator>
   );
@@ -137,57 +158,72 @@ function ProfileStackScreen() {
       />
       <ProfileStack.Screen
         name="Admin"
-        options={{ title: 'Admin Panel' }}
+        options={{ title: 'Admin Panel', headerShown: false }}
       >
         {() => <AdminGuard navigation={{ navigate: () => {} }}><AdminScreen /></AdminGuard>}
       </ProfileStack.Screen>
       <ProfileStack.Screen
         name="MyBookings"
         component={MyBookingsScreen}
-        options={{ title: 'My Bookings' }}
+        options={{ title: 'My Bookings', headerShown: false }}
       />
       <ProfileStack.Screen
         name="BookingsManager"
-        options={{ title: 'Manage Bookings' }}
+        options={{ title: 'Manage Bookings', headerShown: false }}
       >
         {() => <AdminGuard><BookingsManagerScreen /></AdminGuard>}
       </ProfileStack.Screen>
       <ProfileStack.Screen
-        name="Notifications"
+        name="notifications"
         component={NotificationsScreen}
-        options={{ title: 'Notifications' }}
+        options={{ title: 'Notifications', headerShown: false }}
       />
       <ProfileStack.Screen
         name="Favorites"
         component={FavoritesScreen}
-        options={{ title: 'Favorites' }}
+        options={{ title: 'Favorites', headerShown: false }}
       />
       <ProfileStack.Screen
         name="Chat"
         component={ChatScreen}
-        options={{ title: 'Chat' }}
+        options={{ title: 'Chat', headerShown: false }}
       />
       <ProfileStack.Screen
         name="ManageProviders"
-        options={{ title: 'Manage Providers' }}
+        options={{ title: 'Manage Providers', headerShown: false }}
       >
         {() => <AdminGuard><ManageProvidersScreen /></AdminGuard>}
       </ProfileStack.Screen>
       <ProfileStack.Screen
         name="ManageCategories"
-        options={{ title: 'Manage Categories' }}
+        options={{ title: 'Manage Categories', headerShown: false }}
       >
         {() => <AdminGuard><ManageCategoriesScreen /></AdminGuard>}
       </ProfileStack.Screen>
       <ProfileStack.Screen
-        name="Settings"
+        name="settings"
         component={SettingsScreen}
         options={{ headerShown: false }}
       />
       <ProfileStack.Screen
         name="ProviderDashboard"
         component={ProviderDashboardScreen}
-        options={{ title: 'Provider Dashboard' }}
+        options={{ title: 'Provider Dashboard', headerShown: false }}
+      />
+      <ProfileStack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{ title: 'Edit Professional Profile', headerShown: false }}
+      />
+      <ProfileStack.Screen
+        name="PublicProfile"
+        component={PublicProfileScreen}
+        options={({ route }) => ({ title: route.params?.userName || 'Profile', headerShown: false })}
+      />
+      <ProfileStack.Screen
+        name="PostDetail"
+        component={PostDetailScreen}
+        options={{ title: 'Post', headerShown: false }}
       />
     </ProfileStack.Navigator>
   );
@@ -206,6 +242,45 @@ function MessagesStackScreen() {
   );
 }
 
+function CommunityStackScreen() {
+  const { colors } = useTheme();
+  return (
+    <CommunityStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.headerBg },
+        headerTintColor: colors.headerText,
+        headerTitleStyle: { fontWeight: 'bold' },
+      }}
+    >
+      <CommunityStack.Screen
+        name="CommunityMain"
+        component={CommunityScreen}
+        options={{ headerShown: false, title: 'Community Board' }}
+      />
+      <CommunityStack.Screen
+        name="PublicProfile"
+        component={PublicProfileScreen}
+        options={({ route }) => ({ title: route.params?.userName || 'Profile', headerShown: false })}
+      />
+      <CommunityStack.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{ title: 'Chat', headerShown: false }}
+      />
+      <CommunityStack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{ title: 'Edit Professional Profile', headerShown: false }}
+      />
+      <CommunityStack.Screen
+        name="PostDetail"
+        component={PostDetailScreen}
+        options={{ title: 'Post', headerShown: false }}
+      />
+    </CommunityStack.Navigator>
+  );
+}
+
 function MainAppWrapper() {
   return (
     <ErrorBoundary>
@@ -216,10 +291,20 @@ function MainAppWrapper() {
 
 function RootScreen() {
   const { user } = React.useContext(AuthContext);
+  const { colors } = useTheme();
   if (user) {
     return <MainAppWrapper />;
   }
-  return <AuthScreen />;
+  return (
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+      <AuthStack.Screen name="Auth" component={AuthScreen} />
+      <AuthStack.Screen
+        name="OnboardingProfile"
+        component={OnboardingProfileScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+    </AuthStack.Navigator>
+  );
 }
 
 function MainTabs() {
@@ -228,6 +313,7 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        swipeEnabled: route.name !== 'Community',
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
           if (route.name === 'Home') {
@@ -252,7 +338,8 @@ function MainTabs() {
         },
         tabBarStyle: {
           backgroundColor: colors.tabBg,
-          borderTopWidth: 0,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
           elevation: 12,
           shadowColor: colors.shadow,
           shadowOffset: { width: 0, height: -4 },
@@ -266,7 +353,7 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeStackScreen} />
       <Tab.Screen name="Messages" component={MessagesStackScreen} />
       <Tab.Screen name="Profile" component={ProfileStackScreen} />
-      <Tab.Screen name="Community" component={CommunityScreen} />
+      <Tab.Screen name="Community" component={CommunityStackScreen} />
       <Tab.Screen name="About" component={AboutScreen} />
     </Tab.Navigator>
   );
@@ -318,9 +405,15 @@ export default function AppNavigator() {
         setUserOnlineStatus(user.id, false);
       }
     });
+    const heartbeat = setInterval(() => {
+      if (AppState.currentState === 'active') {
+        setUserOnlineStatus(user.id, true);
+      }
+    }, 30000);
     const handleUnload = () => setUserOnlineStatus(user.id, false);
     return () => {
       sub.remove();
+      clearInterval(heartbeat);
       setUserOnlineStatus(user.id, false);
     };
   }, [user?.id]);

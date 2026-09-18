@@ -2,10 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   Alert,
   Modal,
@@ -16,6 +14,7 @@ import {
   LayoutAnimation,
   UIManager,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -33,10 +32,12 @@ import {
   getCurrentUser,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../context/ToastContext';
 import { createStyleSheet } from '../utils/responsive';
 
-export default function ManageProvidersScreen({ navigation }) {
+export default function ManageProvidersScreen() {
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const toast = useToast();
   const [providers, setProviders] = useState([]);
@@ -54,6 +55,8 @@ export default function ManageProvidersScreen({ navigation }) {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [newImage, setNewImage] = useState(null);
   const [categories, setCategories] = useState([]);
+
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   useFocusEffect(
     useCallback(() => {
@@ -214,10 +217,10 @@ export default function ManageProvidersScreen({ navigation }) {
         </View>
         <View style={styles.cardActions}>
           <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionBtn}>
-            <Ionicons name="create" size={18} color="#2196F3" />
+            <Ionicons name="pencil" size={18} color={colors.info} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionBtn}>
-            <Ionicons name="trash" size={18} color="#F44336" />
+            <Ionicons name="trash" size={18} color={colors.danger} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={async () => {
@@ -227,7 +230,7 @@ export default function ManageProvidersScreen({ navigation }) {
             }}
             style={styles.actionBtn}
           >
-            <Ionicons name={item.verified ? 'checkmark-circle' : 'checkmark-circle-outline'} size={18} color={item.verified ? '#4CAF50' : '#ccc'} />
+            <Ionicons name={item.verified ? 'checkmark-circle' : 'checkmark-circle-outline'} size={18} color={item.verified ? colors.success : colors.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={async () => {
@@ -237,7 +240,7 @@ export default function ManageProvidersScreen({ navigation }) {
             }}
             style={styles.actionBtn}
           >
-            <Ionicons name={item.licensed ? 'ribbon' : 'ribbon-outline'} size={18} color={item.licensed ? '#2196F3' : '#ccc'} />
+            <Ionicons name={item.licensed ? 'ribbon' : 'ribbon-outline'} size={18} color={item.licensed ? colors.info : colors.textMuted} />
           </TouchableOpacity>
         </View>
       </View>
@@ -246,11 +249,11 @@ export default function ManageProvidersScreen({ navigation }) {
       </Text>
       <View style={styles.cardMeta}>
         <View style={styles.metaItem}>
-          <Ionicons name="call" size={14} color={colors.textSecondary} />
+          <Ionicons name="phone" size={14} color={colors.textSecondary} />
           <Text style={styles.metaText}>{item.phone}</Text>
         </View>
         <View style={styles.metaItem}>
-          <Ionicons name="location" size={14} color={colors.textSecondary} />
+          <Ionicons name="location-on" size={14} color={colors.textSecondary} />
           <Text style={styles.metaText} numberOfLines={1}>{item.address}</Text>
         </View>
       </View>
@@ -282,7 +285,7 @@ export default function ManageProvidersScreen({ navigation }) {
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={colors.textMuted} />
+        <Ionicons name="search-outline" size={20} color={colors.textMuted} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search providers..."
@@ -320,7 +323,7 @@ export default function ManageProvidersScreen({ navigation }) {
       {/* Add/Edit Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.modalContent}>
@@ -407,7 +410,7 @@ export default function ManageProvidersScreen({ navigation }) {
                 </TouchableOpacity>
                 {newImage && (
                   <TouchableOpacity style={styles.removeImageBtn} onPress={() => setNewImage(null)}>
-                    <Ionicons name="close-circle" size={18} color="#F44336" />
+                    <Ionicons name="close-circle" size={18} color={colors.danger} />
                     <Text style={styles.removeImageText}>Remove photo</Text>
                   </TouchableOpacity>
                 )}
@@ -636,8 +639,6 @@ const getStyles = (colors) => createStyleSheet({
   },
   removeImageText: {
     fontSize: 13,
-    color: '#F44336',
+    color: colors.danger,
   },
 });
-
-const styles = getStyles({ bg:'#F0F2F5', card:'#fff', text:'#1A1A2E', textSecondary:'#6B7280', textMuted:'#9CA3AF', border:'#E5E7EB', borderLight:'#F3F4F6', primary:'#1a237e', primaryLight:'#E8EAF6', headerBg:'#1a237e', headerText:'#fff', inputBg:'#F9FAFB', white:'#fff', shadow:'#000', tabBg:'#fff', statusBar:'dark-content' });

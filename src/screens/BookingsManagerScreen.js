@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   Linking,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getRegisteredBusinesses,
@@ -18,15 +18,18 @@ import {
   getCurrentUser,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useNavigation } from '@react-navigation/native';
 import { createStyleSheet } from '../utils/responsive';
 
-export default function BookingsManagerScreen({ navigation }) {
+export default function BookingsManagerScreen() {
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const [businesses, setBusinesses] = useState([]);
   const [selectedBusiness, setSelectedBusiness] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadBusinesses();
@@ -56,6 +59,15 @@ export default function BookingsManagerScreen({ navigation }) {
     setBookings(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadBusinesses();
+    if (selectedBusiness) {
+      await loadBookings(selectedBusiness.id);
+    }
+    setRefreshing(false);
+  };
+
   const handleStatusUpdate = (booking, status) => {
     const labels = {
       confirmed: 'Confirm',
@@ -81,15 +93,15 @@ export default function BookingsManagerScreen({ navigation }) {
   const getStatusColor = (status) => {
     switch (status) {
       case 'confirmed':
-        return '#4CAF50';
+        return colors.success;
       case 'pending':
-        return '#FF9800';
+        return colors.warning;
       case 'cancelled':
-        return '#F44336';
+        return colors.danger;
       case 'completed':
-        return '#2196F3';
+        return colors.info;
       default:
-        return '#999';
+        return colors.textMuted;
     }
   };
 
@@ -112,11 +124,11 @@ export default function BookingsManagerScreen({ navigation }) {
 
       <View style={styles.cardBody}>
         <View style={styles.detailRow}>
-          <Ionicons name="calendar" size={16} color="#666" />
+          <Ionicons name="calendar" size={16} color={colors.textMuted} />
           <Text style={styles.detailText}>{item.date} at {item.time}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="alert-circle" size={16} color="#666" />
+          <Ionicons name="alert-circle" size={16} color={colors.textMuted} />
           <Text style={styles.detailText}>{item.urgency} priority</Text>
         </View>
         <Text style={styles.description}>{item.description}</Text>
@@ -127,7 +139,7 @@ export default function BookingsManagerScreen({ navigation }) {
           style={styles.callButton}
           onPress={() => Linking.openURL(`tel:${item.businessPhone}`)}
         >
-          <Ionicons name="call" size={16} color="#4CAF50" />
+          <Ionicons name="phone" size={16} color={colors.success} />
           <Text style={styles.callText}>Call Customer</Text>
         </TouchableOpacity>
 
@@ -135,7 +147,7 @@ export default function BookingsManagerScreen({ navigation }) {
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={styles.confirmButton}
-              onPress={() => handleStatusUpdate(item, 'confirmed')}
+              onPress={() => handleStatusUpdate(item, 'approved')}
             >
               <Text style={styles.confirmText}>Confirm</Text>
             </TouchableOpacity>
@@ -148,7 +160,7 @@ export default function BookingsManagerScreen({ navigation }) {
           </View>
         )}
 
-        {item.status === 'confirmed' && (
+        {item.status === 'approved' && (
           <TouchableOpacity
             style={styles.completeButton}
             onPress={() => handleStatusUpdate(item, 'completed')}
@@ -172,7 +184,7 @@ export default function BookingsManagerScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
-          <Ionicons name="storefront-outline" size={64} color="#ccc" />
+          <Ionicons name="storefront" size={64} color={colors.textMuted} />
           <Text style={styles.emptyText}>No businesses registered</Text>
           <Text style={styles.emptySubtext}>
             Register a business first to manage bookings
@@ -184,6 +196,12 @@ export default function BookingsManagerScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color={colors.headerText} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.headerText }]}>Manage Bookings</Text>
+      </View>
       {businesses.length > 1 && !selectedBusiness && (
         <View style={styles.businessSelector}>
           <Text style={styles.selectorTitle}>Select a business:</Text>
@@ -196,7 +214,7 @@ export default function BookingsManagerScreen({ navigation }) {
                 loadBookings(b.id);
               }}
             >
-              <Ionicons name="storefront" size={20} color="#1a237e" />
+              <Ionicons name="storefront" size={20} color={colors.primary} />
               <Text style={styles.businessOptionText}>{b.name}</Text>
             </TouchableOpacity>
           ))}
@@ -233,10 +251,13 @@ export default function BookingsManagerScreen({ navigation }) {
             renderItem={renderBooking}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+            }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.borderLight, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-                  <Ionicons name="clipboard-outline" size={40} color={colors.textMuted} />
+                  <Ionicons name="clipboard" size={40} color={colors.textMuted} />
                 </View>
                 <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8 }}>No bookings</Text>
                 <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>No bookings match this filter</Text>
@@ -253,6 +274,17 @@ const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   businessSelector: {
     padding: 16,
@@ -288,11 +320,11 @@ const getStyles = (colors) => createStyleSheet({
   headerTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1a237e',
+    color: colors.primary,
   },
   changeText: {
     fontSize: 14,
-    color: '#1a237e',
+    color: colors.primary,
     fontWeight: '600',
   },
   filterBar: {
@@ -309,7 +341,7 @@ const getStyles = (colors) => createStyleSheet({
     marginHorizontal: 3,
   },
   activeFilter: {
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
   },
   filterText: {
     fontSize: 11,
@@ -394,14 +426,14 @@ const getStyles = (colors) => createStyleSheet({
   callText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.success,
     fontWeight: '600',
   },
   actionButtons: {
     flexDirection: 'row',
   },
   confirmButton: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.successLight,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
@@ -410,10 +442,10 @@ const getStyles = (colors) => createStyleSheet({
   confirmText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: colors.success,
   },
   rejectButton: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: colors.dangerLight,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
@@ -421,10 +453,10 @@ const getStyles = (colors) => createStyleSheet({
   rejectText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#F44336',
+    color: colors.danger,
   },
   completeButton: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: colors.infoLight,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
@@ -432,7 +464,7 @@ const getStyles = (colors) => createStyleSheet({
   completeText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#2196F3',
+    color: colors.info,
   },
   emptyContainer: {
     alignItems: 'center',

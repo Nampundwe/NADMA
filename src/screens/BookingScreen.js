@@ -6,11 +6,11 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { createBooking, getCurrentUser } from '../data/firebaseStorage';
@@ -132,7 +132,7 @@ export default function BookingScreen({ route, navigation }) {
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.businessCard}>
-            <Ionicons name="storefront" size={32} color="#1a237e" />
+            <Ionicons name="storefront" size={32} color={colors.primary} />
             <View style={styles.businessInfo}>
               <Text style={styles.businessName}>{service.name}</Text>
               <Text style={styles.businessCategory}>{service.category}</Text>
@@ -148,11 +148,11 @@ export default function BookingScreen({ route, navigation }) {
                 accessibilityLabel="Select date"
                 accessibilityRole="button"
               >
-                <Ionicons name="calendar" size={22} color="#1a237e" />
+                <Ionicons name="calendar" size={22} color={colors.primary} />
                 <Text style={[styles.pickerText, !date && { color: colors.textMuted }]}>
                   {date ? formatDate(date) : 'Select a date'}
                 </Text>
-                <Ionicons name="chevron-down" size={20} color="#666" />
+                <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
               </TouchableOpacity>
               {showDatePicker && (
                 <DateTimePicker
@@ -173,11 +173,11 @@ export default function BookingScreen({ route, navigation }) {
                 accessibilityLabel="Select time"
                 accessibilityRole="button"
               >
-                <Ionicons name="time" size={22} color="#1a237e" />
+                <Ionicons name="schedule" size={22} color={colors.primary} />
                 <Text style={[styles.pickerText, !time && { color: colors.textMuted }]}>
                   {time || 'Select a time'}
                 </Text>
-                <Ionicons name="chevron-down" size={20} color="#666" />
+                <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
               </TouchableOpacity>
               {showTimePicker && (
                 <DateTimePicker
@@ -228,7 +228,7 @@ export default function BookingScreen({ route, navigation }) {
                 <Ionicons
                   name={showUrgencyPicker ? 'chevron-up' : 'chevron-down'}
                   size={20}
-                  color="#666"
+                  color={colors.textMuted}
                 />
               </TouchableOpacity>
               {showUrgencyPicker && (
@@ -327,7 +327,7 @@ const getStyles = (colors) => createStyleSheet({
   businessName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1a237e',
+    color: colors.text,
   },
   businessCategory: {
     fontSize: 14,
@@ -408,7 +408,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   optionTextSelected: {
     fontWeight: '600',
-    color: '#1a237e',
+    color: colors.primary,
   },
   summaryCard: {
     backgroundColor: colors.card,
@@ -438,7 +438,7 @@ const getStyles = (colors) => createStyleSheet({
     color: colors.text,
   },
   bookButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

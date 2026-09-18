@@ -4,13 +4,16 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   TextInput,
   StatusBar,
   ActivityIndicator,
+  Image,
+  RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { ProfileSkeleton } from '../components/Skeleton';
 import {
   getCurrentUser,
   logout,
@@ -42,6 +45,7 @@ export default function ProfileScreen({ navigation }) {
   const [following, setFollowing] = useState(0);
   const [referralCode, setReferralCode] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => loadUser());
@@ -75,6 +79,12 @@ export default function ProfileScreen({ navigation }) {
       setReferralCode(code);
     }
     setLoading(false);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadUser();
+    setRefreshing(false);
   };
 
   const handleLogout = async () => {
@@ -114,9 +124,9 @@ export default function ProfileScreen({ navigation }) {
   const getRoleBadge = () => {
     switch (user?.role) {
       case 'admin':
-        return { label: 'Admin', color: '#E91E63', icon: 'shield-checkmark' };
+        return { label: 'Admin', color: colors.danger, icon: 'verified-user' };
       default:
-        return { label: 'User', color: '#2196F3', icon: 'person' };
+        return { label: 'User', color: colors.info, icon: 'person' };
     }
   };
 
@@ -197,6 +207,11 @@ export default function ProfileScreen({ navigation }) {
       fontWeight: 'bold',
       color: '#fff',
     },
+    avatarImage: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+    },
     nameRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -226,7 +241,7 @@ export default function ProfileScreen({ navigation }) {
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: '#4CAF50',
+      backgroundColor: colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -240,7 +255,7 @@ export default function ProfileScreen({ navigation }) {
     },
     userEmail: {
       fontSize: 14,
-      color: '#C5CAE9',
+      color: colors.textMuted,
       marginTop: 4,
       marginBottom: 12,
     },
@@ -298,7 +313,7 @@ export default function ProfileScreen({ navigation }) {
     },
     userHeadline: {
       fontSize: 14,
-      color: '#C5CAE9',
+      color: colors.textMuted,
       fontWeight: '500',
     },
     editHeadlineContainer: {
@@ -367,13 +382,13 @@ export default function ProfileScreen({ navigation }) {
       backgroundColor: colors.card,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: '#FEE2E2',
+      borderColor: colors.dangerLight,
       gap: 8,
     },
     logoutText: {
       fontSize: 15,
       fontWeight: '600',
-      color: '#F44336',
+      color: colors.danger,
     },
     version: {
       textAlign: 'center',
@@ -416,7 +431,7 @@ export default function ProfileScreen({ navigation }) {
       letterSpacing: 2,
     },
     referralShareBtn: {
-      backgroundColor: '#4CAF50',
+      backgroundColor: colors.primary,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -435,8 +450,9 @@ export default function ProfileScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.bg} />
+        <ProfileSkeleton />
       </View>
     );
   }
@@ -454,7 +470,7 @@ export default function ProfileScreen({ navigation }) {
           <TouchableOpacity
             style={styles.loginButton}
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('Login')}
+            onPress={() =>       navigation.navigate('Auth')}
             accessibilityLabel="Sign in"
             accessibilityRole="button"
           >
@@ -471,11 +487,15 @@ export default function ProfileScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.headerBg} />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}>
         {/* Profile Header */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            {user.profileImage ? (
+              <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{initials}</Text>
+            )}
           </View>
           {editing ? (
             <View style={styles.editContainer}>
@@ -484,12 +504,12 @@ export default function ProfileScreen({ navigation }) {
                 value={editName}
                 onChangeText={setEditName}
                 autoFocus
-                placeholderTextColor="#C5CAE9"
+                placeholderTextColor={colors.textMuted}
                 maxLength={50}
                 accessibilityLabel="Edit name"
               />
                <TouchableOpacity style={styles.editSaveBtn} onPress={handleSaveName} accessibilityLabel="Save name" accessibilityRole="button">
-                <Ionicons name="checkmark" size={20} color="#fff" />
+                <Ionicons name="check" size={20} color="#fff" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.editCancelBtn} onPress={() => setEditing(false)} accessibilityLabel="Cancel editing" accessibilityRole="button">
                 <Ionicons name="close" size={20} color="#fff" />
@@ -518,7 +538,7 @@ export default function ProfileScreen({ navigation }) {
                   accessibilityLabel="Edit headline"
                 />
                 <TouchableOpacity style={styles.editSaveBtn} onPress={handleSaveHeadline} accessibilityLabel="Save headline" accessibilityRole="button">
-                  <Ionicons name="checkmark" size={20} color="#fff" />
+                  <Ionicons name="check" size={20} color="#fff" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.editCancelBtn} onPress={() => setEditingHeadline(false)} accessibilityLabel="Cancel headline edit" accessibilityRole="button">
                   <Ionicons name="close" size={20} color="#fff" />
@@ -548,22 +568,22 @@ export default function ProfileScreen({ navigation }) {
         {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Ionicons name="heart" size={20} color="#E91E63" />
+              <Ionicons name="heart" size={20} color={colors.danger} />
             <Text style={styles.statNumber}>{stats.favorites}</Text>
             <Text style={styles.statLabel}>Favorites</Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="people" size={20} color="#1a237e" />
+            <Ionicons name="people" size={20} color={colors.primary} />
             <Text style={styles.statNumber}>{followers}</Text>
             <Text style={styles.statLabel}>Followers</Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="chatbubble-ellipses" size={20} color="#FF9800" />
+            <Ionicons name="chat" size={20} color={colors.warning} />
             <Text style={styles.statNumber}>{stats.reviews}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="storefront" size={20} color="#4CAF50" />
+              <Ionicons name="storefront" size={20} color={colors.success} />
             <Text style={styles.statNumber}>{stats.businesses}</Text>
             <Text style={styles.statLabel}>Businesses</Text>
           </View>
@@ -573,33 +593,43 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.menuSection}>
           <Text style={styles.menuSectionTitle}>Account</Text>
 
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('EditProfile'); }} accessibilityLabel="Edit professional profile" accessibilityRole="button">
+            <View style={[styles.menuIcon, { backgroundColor: colors.successLight }]}>
+              <Ionicons name="ribbon" size={20} color={colors.success} />
+            </View>
+            <Text style={styles.menuItemText}>Professional Profile</Text>
+            <View style={styles.menuRight}>
+              <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('MyBookings'); }} accessibilityLabel="My bookings" accessibilityRole="button">
-            <View style={[styles.menuIcon, { backgroundColor: '#E3F2FD' }]}>
-              <Ionicons name="calendar" size={20} color="#2196F3" />
+            <View style={[styles.menuIcon, { backgroundColor: colors.infoLight }]}>
+              <Ionicons name="calendar" size={20} color={colors.info} />
             </View>
             <Text style={styles.menuItemText}>My Bookings</Text>
             <View style={styles.menuRight}>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('Favorites'); }} accessibilityLabel="My favorites" accessibilityRole="button">
-            <View style={[styles.menuIcon, { backgroundColor: '#FCE4EC' }]}>
-              <Ionicons name="heart" size={20} color="#E91E63" />
+            <View style={[styles.menuIcon, { backgroundColor: colors.successLight }]}>
+            <Ionicons name="heart" size={20} color={colors.danger} />
             </View>
             <Text style={styles.menuItemText}>My Favorites</Text>
             <View style={styles.menuRight}>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('Notifications'); }} accessibilityLabel="Notifications" accessibilityRole="button">
-            <View style={[styles.menuIcon, { backgroundColor: '#FFF3E0' }]}>
-              <Ionicons name="notifications" size={20} color="#FF9800" />
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('notifications'); }} accessibilityLabel="Notifications" accessibilityRole="button">
+            <View style={[styles.menuIcon, { backgroundColor: colors.warningLight }]}>
+              <Ionicons name="notifications" size={20} color={colors.warning} />
             </View>
             <Text style={styles.menuItemText}>Notifications</Text>
             <View style={styles.menuRight}>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
 
@@ -615,24 +645,24 @@ export default function ProfileScreen({ navigation }) {
               accessibilityLabel="Contact admin"
               accessibilityRole="button"
             >
-              <View style={[styles.menuIcon, { backgroundColor: '#FFEBEE' }]}>
-                <Ionicons name="help-buoy" size={20} color="#F44336" />
+            <View style={[styles.menuIcon, { backgroundColor: colors.dangerLight }]}>
+              <Ionicons name="help" size={20} color={colors.danger} />
               </View>
               <Text style={styles.menuItemText}>Contact Admin</Text>
               <View style={styles.menuRight}>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
           )}
 
           {user.role === 'admin' && (
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('BookingsManager'); }} accessibilityLabel="Manage bookings" accessibilityRole="button">
-              <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="clipboard" size={20} color="#4CAF50" />
+              <View style={[styles.menuIcon, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="clipboard" size={20} color={colors.success} />
               </View>
               <Text style={styles.menuItemText}>Manage Bookings</Text>
               <View style={styles.menuRight}>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
           )}
@@ -640,22 +670,22 @@ export default function ProfileScreen({ navigation }) {
           {user.role === 'provider' && (
             <>
               <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('ProviderDashboard'); }} accessibilityLabel="My business dashboard" accessibilityRole="button">
-                <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
-                  <Ionicons name="business" size={20} color="#4CAF50" />
+                <View style={[styles.menuIcon, { backgroundColor: colors.successLight }]}>
+                  <Ionicons name="business" size={20} color={colors.success} />
                 </View>
                 <Text style={styles.menuItemText}>My Business Dashboard</Text>
                 <View style={styles.menuRight}>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
                 </View>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('BookingsManager'); }} accessibilityLabel="Manage bookings" accessibilityRole="button">
-                <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
-                  <Ionicons name="clipboard" size={20} color="#4CAF50" />
+                <View style={[styles.menuIcon, { backgroundColor: colors.successLight }]}>
+                  <Ionicons name="clipboard" size={20} color={colors.success} />
                 </View>
                 <Text style={styles.menuItemText}>Manage Bookings</Text>
                 <View style={styles.menuRight}>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
                 </View>
               </TouchableOpacity>
             </>
@@ -668,32 +698,32 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.menuSectionTitle}>Administration</Text>
 
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('Admin'); }} accessibilityLabel="Admin panel" accessibilityRole="button">
-              <View style={[styles.menuIcon, { backgroundColor: '#FCE4EC' }]}>
-                <Ionicons name="shield-checkmark" size={20} color="#E91E63" />
+              <View style={[styles.menuIcon, { backgroundColor: colors.dangerLight }]}>
+                <Ionicons name="shield-checkmark" size={20} color={colors.danger} />
               </View>
               <Text style={styles.menuItemText}>Admin Panel</Text>
               <View style={styles.menuRight}>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('ManageProviders'); }} accessibilityLabel="Manage providers" accessibilityRole="button">
-              <View style={[styles.menuIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="people" size={20} color="#FF9800" />
+              <View style={[styles.menuIcon, { backgroundColor: colors.warningLight }]}>
+                <Ionicons name="people" size={20} color={colors.warning} />
               </View>
               <Text style={styles.menuItemText}>Manage Providers</Text>
               <View style={styles.menuRight}>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('ManageCategories'); }} accessibilityLabel="Manage categories" accessibilityRole="button">
-              <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="grid" size={20} color="#4CAF50" />
+              <View style={[styles.menuIcon, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="grid-view" size={20} color={colors.success} />
               </View>
               <Text style={styles.menuItemText}>Manage Categories</Text>
               <View style={styles.menuRight}>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
           </View>
@@ -705,8 +735,8 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.menuSectionTitle}>Refer & Earn</Text>
             <View style={styles.referralCard}>
               <View style={styles.referralHeader}>
-                <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
-                  <Ionicons name="gift" size={20} color="#4CAF50" />
+                <View style={[styles.menuIcon, { backgroundColor: colors.successLight }]}>
+                  <Ionicons name="gift" size={20} color={colors.success} />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text }}>Invite Friends</Text>
@@ -729,7 +759,7 @@ export default function ProfileScreen({ navigation }) {
                 accessibilityLabel="Share referral code"
                 accessibilityRole="button"
               >
-                <Ionicons name="share-social" size={18} color="#fff" />
+                <Ionicons name="share" size={18} color="#fff" />
                 <Text style={styles.referralShareText}>Share Code</Text>
               </TouchableOpacity>
             </View>
@@ -740,12 +770,12 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.menuSection}>
           <Text style={styles.menuSectionTitle}>More</Text>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('About'); }} accessibilityLabel="About" accessibilityRole="button">
-            <View style={[styles.menuIcon, { backgroundColor: '#00BCD4' + '20' }]}>
-              <Ionicons name="info-circle" size={20} color="#00BCD4" />
+            <View style={[styles.menuIcon, { backgroundColor: colors.infoLight }]}>
+              <Ionicons name="info" size={20} color={colors.info} />
             </View>
             <Text style={styles.menuItemText}>About</Text>
             <View style={styles.menuRight}>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
         </View>
@@ -753,20 +783,20 @@ export default function ProfileScreen({ navigation }) {
         {/* Settings */}
         <View style={styles.menuSection}>
           <Text style={styles.menuSectionTitle}>Settings</Text>
-          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('Settings'); }} accessibilityLabel="Settings" accessibilityRole="button">
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { hapticLight(); navigation.navigate('settings'); }} accessibilityLabel="Settings" accessibilityRole="button">
             <View style={[styles.menuIcon, { backgroundColor: colors.primaryLight }]}>
               <Ionicons name="settings" size={20} color={colors.primary} />
             </View>
             <Text style={styles.menuItemText}>Settings</Text>
             <View style={styles.menuRight}>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
         </View>
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} activeOpacity={0.8} onPress={handleLogout} accessibilityLabel="Sign out" accessibilityRole="button">
-          <Ionicons name="log-out-outline" size={20} color="#F44336" />
+            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
 

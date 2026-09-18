@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   Linking,
   Modal,
@@ -16,7 +14,9 @@ import {
   LayoutAnimation,
   UIManager,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -70,6 +70,11 @@ export default function MyBookingsScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    if (user) {
+      const allReviews = await getReviews();
+      const rated = allReviews.filter((r) => r.userId === user.id).map((r) => r.serviceId);
+      setRatedBookings(rated);
+    }
     setRefreshing(false);
   };
 
@@ -127,16 +132,16 @@ export default function MyBookingsScreen({ navigation }) {
     switch (status) {
       case 'approved':
       case 'confirmed':
-        return '#4CAF50';
+        return colors.success;
       case 'pending':
-        return '#FF9800';
+        return colors.warning;
       case 'rejected':
       case 'cancelled':
-        return '#F44336';
+        return colors.danger;
       case 'completed':
-        return '#2196F3';
+        return colors.info;
       default:
-        return '#999';
+        return colors.textMuted;
     }
   };
 
@@ -175,15 +180,15 @@ export default function MyBookingsScreen({ navigation }) {
 
       <View style={styles.cardBody}>
         <View style={styles.detailRow}>
-          <Ionicons name="calendar" size={16} color="#666" />
+          <Ionicons name="calendar" size={16} color={colors.textMuted} />
           <Text style={styles.detailText}>{item.date}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="time" size={16} color="#666" />
+          <Ionicons name="schedule" size={16} color={colors.textMuted} />
           <Text style={styles.detailText}>{item.time}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="alert-circle" size={16} color="#666" />
+          <Ionicons name="alert-circle" size={16} color={colors.textMuted} />
           <Text style={styles.detailText}>{item.urgency} priority</Text>
         </View>
         <Text style={styles.description}>{item.description}</Text>
@@ -193,35 +198,35 @@ export default function MyBookingsScreen({ navigation }) {
         {item.status === 'pending' && (
           <>
             <TouchableOpacity style={styles.callButton} onPress={() => callBusiness(item.businessPhone)}>
-              <Ionicons name="call" size={16} color="#4CAF50" />
+              <Ionicons name="phone" size={16} color={colors.success} />
               <Text style={styles.callText}>Call</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelButton} onPress={() => { hapticWarning(); handleCancel(item); }}>
-              <Ionicons name="close-circle" size={16} color="#F44336" />
+              <Ionicons name="close-circle" size={16} color={colors.danger} />
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </>
         )}
         {item.status === 'approved' && (
           <TouchableOpacity style={styles.callButton} onPress={() => callBusiness(item.businessPhone)}>
-            <Ionicons name="call" size={16} color="#4CAF50" />
+            <Ionicons name="phone" size={16} color={colors.success} />
             <Text style={styles.callText}>Call Business</Text>
           </TouchableOpacity>
         )}
         {item.status === 'completed' && !ratedBookings.includes(item.businessId) && (
           <TouchableOpacity style={styles.rateButton} onPress={() => { hapticLight(); openRateModal(item); }}>
-            <Ionicons name="star" size={16} color="#FFD700" />
+            <Ionicons name="star" size={16} color={colors.warning} />
             <Text style={styles.rateText}>Rate Service</Text>
           </TouchableOpacity>
         )}
         {item.status === 'completed' && ratedBookings.includes(item.businessId) && (
           <View style={styles.ratedBadge}>
-            <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
+            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
             <Text style={styles.ratedText}>Rated</Text>
           </View>
         )}
         <TouchableOpacity style={styles.shareReceiptBtn} onPress={() => shareReceipt(item)}>
-          <Ionicons name="receipt-outline" size={16} color="#1a237e" />
+          <Ionicons name="receipt" size={16} color={colors.primary} />
           <Text style={styles.shareReceiptText}>Receipt</Text>
         </TouchableOpacity>
       </View>
@@ -238,6 +243,12 @@ export default function MyBookingsScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color={colors.headerText} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.headerText }]}>My Bookings</Text>
+      </View>
       <View style={styles.filterBar}>
         {['all', 'pending', 'approved', 'completed', 'rejected'].map((f) => (
           <TouchableOpacity
@@ -262,7 +273,7 @@ export default function MyBookingsScreen({ navigation }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="calendar-outline" size={64} color="#ccc" />
+            <Ionicons name="calendar" size={64} color={colors.textMuted} />
             <Text style={styles.emptyText}>No bookings yet</Text>
             <Text style={styles.emptySubtext}>
               Book a service to get started
@@ -272,6 +283,7 @@ export default function MyBookingsScreen({ navigation }) {
       />
       {/* Rate Modal */}
       <Modal visible={showRateModal} transparent animationType="slide" onRequestClose={() => setShowRateModal(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setShowRateModal(false)}>
           <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 }}>
             <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 20 }} />
@@ -282,7 +294,7 @@ export default function MyBookingsScreen({ navigation }) {
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 20 }}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity key={star} onPress={() => setRating(star)}>
-                  <Ionicons name={star <= rating ? 'star' : 'star-outline'} size={40} color="#FFD700" />
+                  <Ionicons name={star <= rating ? 'star' : 'star-outline'} size={40} color={colors.warning} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -300,12 +312,13 @@ export default function MyBookingsScreen({ navigation }) {
               <TouchableOpacity style={{ flex: 1, padding: 14, alignItems: 'center', borderRadius: 14, backgroundColor: colors.borderLight }} onPress={() => setShowRateModal(false)}>
                 <Text style={{ fontSize: 15, color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={{ flex: 1, padding: 14, alignItems: 'center', borderRadius: 14, backgroundColor: '#1a237e' }} onPress={submitRating}>
-                <Text style={{ fontSize: 15, color: '#fff', fontWeight: '600' }}>Submit</Text>
+              <TouchableOpacity style={{ flex: 1, padding: 14, alignItems: 'center', borderRadius: 14, backgroundColor: colors.primary }} onPress={submitRating}>
+                <Text style={{ fontSize: 15, color: colors.white, fontWeight: '600' }}>Submit</Text>
               </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -315,6 +328,17 @@ const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   filterBar: {
     flexDirection: 'row',
@@ -330,14 +354,14 @@ const getStyles = (colors) => createStyleSheet({
     marginHorizontal: 4,
   },
   activeFilter: {
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
   },
   filterText: {
     fontSize: 12,
     color: colors.textSecondary,
   },
   activeFilterText: {
-    color: '#fff',
+    color: colors.white,
     fontWeight: '600',
   },
   listContent: {
@@ -371,7 +395,7 @@ const getStyles = (colors) => createStyleSheet({
   statusText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#fff',
+    color: colors.white,
   },
   cardBody: {
     paddingHorizontal: 16,
@@ -414,7 +438,7 @@ const getStyles = (colors) => createStyleSheet({
   callText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.success,
     fontWeight: '600',
   },
   cancelButton: {
@@ -424,7 +448,7 @@ const getStyles = (colors) => createStyleSheet({
   cancelText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#F44336',
+    color: colors.danger,
     fontWeight: '600',
   },
   rateButton: {
@@ -434,7 +458,7 @@ const getStyles = (colors) => createStyleSheet({
   rateText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#FFD700',
+    color: colors.warning,
     fontWeight: '600',
   },
   ratedBadge: {
@@ -444,7 +468,7 @@ const getStyles = (colors) => createStyleSheet({
   ratedText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.success,
     fontWeight: '600',
   },
   shareReceiptBtn: {
@@ -455,7 +479,7 @@ const getStyles = (colors) => createStyleSheet({
   shareReceiptText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#1a237e',
+    color: colors.primary,
     fontWeight: '600',
   },
   emptyContainer: {

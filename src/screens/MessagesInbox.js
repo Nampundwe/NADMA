@@ -2,15 +2,20 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
+  Image,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   Modal,
   StatusBar,
   ActivityIndicator,
   Pressable,
+  TextInput,
+  RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { MessagesSkeleton } from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 import {
   onConversationsSnapshot,
   getCurrentUser,
@@ -36,6 +41,8 @@ export default function MessagesInbox({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [showNewChat, setShowNewChat] = useState(false);
   const [onlineStatuses, setOnlineStatuses] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const unsubsRef = useRef([]);
 
   useEffect(() => {
@@ -49,6 +56,13 @@ export default function MessagesInbox({ navigation }) {
       }
     });
   }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    const u = await getCurrentUser();
+    setUser(u);
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -66,17 +80,18 @@ export default function MessagesInbox({ navigation }) {
   }, [user?.id, filter]);
 
   useEffect(() => {
-    const userIds = conversations.map((c) => c.otherId).filter(Boolean);
+    if (!allUsers.length) return;
     const newUnsubs = [];
-    userIds.forEach((uid) => {
-      if (uid === 'admin') return;
-      const unsub = onUserStatusSnapshot(uid, (status) => {
-        setOnlineStatuses((prev) => ({ ...prev, [uid]: status?.isOnline === true }));
+    allUsers.forEach((usr) => {
+      const unsub = onUserStatusSnapshot(usr.id, (status) => {
+        const lastSeenTime = status?.lastSeen ? new Date(status.lastSeen).getTime() : 0;
+        const isOnline = status?.isOnline === true && (Date.now() - lastSeenTime) < 120000;
+        setOnlineStatuses((prev) => ({ ...prev, [usr.id]: isOnline }));
       });
       newUnsubs.push(unsub);
     });
     return () => newUnsubs.forEach((fn) => fn());
-  }, [conversations]);
+  }, [allUsers]);
 
   const openChat = (conv) => {
     navigation.navigate('Chat', {
@@ -106,36 +121,67 @@ export default function MessagesInbox({ navigation }) {
     });
   };
 
-  const getInitials = (name) => name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
+  const getInitials = (name) => name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '';
+
+  const formatConvTime = (timestamp) => {
+    if (!timestamp) return '';
+    const d = new Date(timestamp);
+    const now = new Date();
+    const diffDays = Math.floor((now - d) / 86400000);
+    if (diffDays === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return d.toLocaleDateString(undefined, { weekday: 'short' });
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  const userMap = {};
+  allUsers.forEach((u) => { userMap[u.id] = u; });
+
+  const renderAvatar = (userId, size = 50) => {
+    const usr = userMap[userId];
+    const img = usr?.profileImage;
+    const name = usr?.name || 'Unknown';
+    return (
+      <View style={[styles.convAvatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.primaryLight }]}>
+        {img ? (
+          <Image source={{ uri: img }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+        ) : (
+          <Text style={[styles.convAvatarText, { color: colors.primary, fontSize: size * 0.36 }]}>
+            {getInitials(name)}
+          </Text>
+        )}
+      </View>
+    );
+  };
 
   const renderConversation = useCallback(({ item }) => {
     const isOnline = onlineStatuses[item.otherId] === true;
     const displayName = item.otherName || item.businessName || 'Unknown';
+    const isMyLastMsg = item.lastMessage?.senderId === user?.id;
+    const previewText = item.lastMessage?.imageUrl
+      ? '📷 Photo'
+      : item.lastMessage?.text || 'No messages yet';
     return (
       <Pressable
         style={[styles.convRow, { borderBottomColor: colors.border }]}
         onPress={() => openChat(item)}
       >
-        <View style={[styles.convAvatar, { backgroundColor: colors.primaryLight }]}>
-          <Text style={[styles.convAvatarText, { color: colors.primary }]}>
-            {getInitials(displayName)}
-          </Text>
-          {isOnline && <View style={[styles.convOnlineDot, { backgroundColor: '#4CAF50' }]} />}
+        <View>
+          {renderAvatar(item.otherId, 54)}
+          {isOnline && <View style={[styles.convOnlineDot, { backgroundColor: colors.success }]} />}
         </View>
         <View style={styles.convBody}>
           <View style={styles.convTopRow}>
-            <Text style={[styles.convName, { color: colors.text }]} numberOfLines={1}>
+            <Text style={[styles.convName, { color: colors.text, fontWeight: item.unread > 0 ? '700' : '600' }]} numberOfLines={1}>
               {displayName}
             </Text>
-            <Text style={[styles.convTime, { color: colors.chatTime }]}>
-              {item.lastMessage?.timestamp
-                ? new Date(item.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : ''}
+            <Text style={[styles.convTime, { color: item.unread > 0 ? colors.success : colors.chatTime }]}>
+              {formatConvTime(item.lastMessage?.timestamp)}
             </Text>
           </View>
           <View style={styles.convBottomRow}>
-            <Text style={[styles.convPreview, { color: colors.chatPreview }]} numberOfLines={1}>
-              {item.lastMessage?.text || 'No messages yet'}
+            <Text style={[styles.convPreview, { color: item.unread > 0 ? colors.text : colors.chatPreview, fontWeight: item.unread > 0 ? '600' : '400' }]} numberOfLines={1}>
+              {isMyLastMsg ? `You: ${previewText}` : previewText}
             </Text>
             {item.unread > 0 && (
               <View style={[styles.convBadge, { backgroundColor: colors.chatUnreadBg }]}>
@@ -146,14 +192,23 @@ export default function MessagesInbox({ navigation }) {
         </View>
       </Pressable>
     );
-  }, [onlineStatuses, colors]);
+  }, [onlineStatuses, colors, userMap, user?.id]);
+
+  const filteredConversations = searchQuery.trim()
+    ? conversations.filter((c) => {
+        const q = searchQuery.toLowerCase();
+        const name = (c.otherName || c.businessName || '').toLowerCase();
+        const lastText = (c.lastMessage?.text || '').toLowerCase();
+        return name.includes(q) || lastText.includes(q);
+      })
+    : conversations;
 
   const styles = createStyles(colors);
 
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.bg }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <MessagesSkeleton />
       </View>
     );
   }
@@ -163,7 +218,26 @@ export default function MessagesInbox({ navigation }) {
       <StatusBar barStyle={colors.statusBar} backgroundColor={colors.headerBg} />
 
       <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color={colors.headerText} />
+        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.headerText }]}>Messages</Text>
+      </View>
+
+      <View style={[styles.searchBar, { backgroundColor: colors.inputBg }]}>
+        <Ionicons name="search-outline" size={18} color={colors.textMuted} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Search conversations..."
+          placeholderTextColor={colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={[styles.filterBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -189,20 +263,54 @@ export default function MessagesInbox({ navigation }) {
       </View>
 
       <FlatList
-        data={conversations}
+        data={filteredConversations}
         renderItem={renderConversation}
         keyExtractor={(item) => item.otherId}
-        contentContainerStyle={conversations.length === 0 ? styles.emptyList : styles.list}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={[styles.emptyIconCircle, { backgroundColor: colors.chatDatePill }]}>
-              <Ionicons name="chatbubbles-outline" size={36} color={colors.chatSendBtn} />
+        contentContainerStyle={filteredConversations.length === 0 ? styles.emptyList : styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+        ListHeaderComponent={
+          allUsers.filter((u) => onlineStatuses[u.id]).length > 0 ? (
+            <View style={styles.activeSection}>
+              <Text style={[styles.activeSectionTitle, { color: colors.text }]}>Active now</Text>
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={allUsers.filter((u) => onlineStatuses[u.id])}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.activeList}
+                renderItem={({ item: usr }) => (
+                  <TouchableOpacity
+                    style={styles.activeUser}
+                    onPress={() => startUserChat(usr)}
+                    activeOpacity={0.7}
+                  >
+                    <View>
+                      {usr.profileImage ? (
+                        <Image source={{ uri: usr.profileImage }} style={[styles.activeAvatar]} />
+                      ) : (
+                        <View style={[styles.activeAvatar, { backgroundColor: colors.primaryLight }]}>
+                          <Text style={[styles.activeAvatarText, { color: colors.primary }]}>
+                            {getInitials(usr.name)}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={[styles.activeDot, { backgroundColor: colors.success }]} />
+                    </View>
+                    <Text style={[styles.activeUserName, { color: colors.text }]} numberOfLines={1}>
+                      {usr.name?.split(' ')[0]}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.chatDateText }]}>No conversations</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.chatTime }]}>
-              Start a new conversation below
-            </Text>
-          </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          <EmptyState
+            icon="chatbubbles-outline"
+            title="No conversations"
+            subtitle="Start a new conversation below"
+          />
         }
       />
 
@@ -211,7 +319,7 @@ export default function MessagesInbox({ navigation }) {
         onPress={() => setShowNewChat(true)}
         activeOpacity={0.8}
       >
-        <Ionicons name="create" size={22} color="#fff" />
+        <Ionicons name="pencil" size={22} color="#fff" />
       </TouchableOpacity>
 
       <Modal visible={showNewChat} animationType="slide" transparent>
@@ -222,14 +330,14 @@ export default function MessagesInbox({ navigation }) {
 
             {user?.role !== 'admin' && (
               <Pressable style={[styles.modalOption, { backgroundColor: colors.inputBg }]} onPress={startAdminChat}>
-                <View style={[styles.modalOptionIcon, { backgroundColor: '#FFEBEE' }]}>
-                  <Ionicons name="shield" size={22} color="#F44336" />
+                <View style={[styles.modalOptionIcon, { backgroundColor: colors.dangerLight }]}>
+                  <Ionicons name="shield" size={22} color={colors.danger} />
                 </View>
                 <View style={styles.modalOptionInfo}>
                   <Text style={[styles.modalOptionName, { color: colors.text }]}>Admin Support</Text>
                   <Text style={[styles.modalOptionSub, { color: colors.textMuted }]}>Get help from admin</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </Pressable>
             )}
 
@@ -242,16 +350,20 @@ export default function MessagesInbox({ navigation }) {
                 style={[styles.modalOption, { backgroundColor: colors.inputBg }]}
                 onPress={() => startUserChat(usr)}
               >
-                <View style={[styles.modalOptionAvatar, { backgroundColor: colors.primaryLight }]}>
-                  <Text style={[styles.modalOptionAvatarText, { color: colors.primary }]}>
-                    {getInitials(usr.name)}
-                  </Text>
-                </View>
+                {usr.profileImage ? (
+                  <Image source={{ uri: usr.profileImage }} style={[styles.modalOptionAvatar]} />
+                ) : (
+                  <View style={[styles.modalOptionAvatar, { backgroundColor: colors.primaryLight }]}>
+                    <Text style={[styles.modalOptionAvatarText, { color: colors.primary }]}>
+                      {getInitials(usr.name)}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.modalOptionInfo}>
                   <Text style={[styles.modalOptionName, { color: colors.text }]}>{usr.name}</Text>
                   <Text style={[styles.modalOptionSub, { color: colors.textMuted }]}>{usr.email}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </Pressable>
             ))}
           </Pressable>
@@ -270,6 +382,17 @@ const createStyles = (colors) => createStyleSheet({
     paddingBottom: 10,
   },
   headerTitle: { fontSize: 22, fontWeight: 'bold' },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  searchInput: { flex: 1, fontSize: 14 },
   filterBar: {
     flexDirection: 'row',
     paddingHorizontal: 12,
@@ -284,6 +407,29 @@ const createStyles = (colors) => createStyleSheet({
   },
   filterTabActive: {},
   filterLabel: { fontSize: 13, fontWeight: '600' },
+  activeSection: { paddingTop: 12, paddingBottom: 8 },
+  activeSectionTitle: { fontSize: 13, fontWeight: '600', paddingHorizontal: 16, marginBottom: 10 },
+  activeList: { paddingHorizontal: 16, gap: 16 },
+  activeUser: { alignItems: 'center', width: 60 },
+  activeAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  activeAvatarText: { fontSize: 16, fontWeight: 'bold' },
+  activeDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+  },
+  activeUserName: { fontSize: 11, textAlign: 'center' },
   list: { paddingBottom: 80 },
   emptyList: { flex: 1 },
   convRow: {

@@ -1,7 +1,9 @@
 import React, { useRef } from 'react';
-import { Animated, TouchableOpacity } from 'react-native';
+import { Animated, TouchableOpacity, Platform } from 'react-native';
+import { useTheme } from '../context/ThemeContext';
 
-export default function AnimatedCard({ children, onPress, style, ...props }) {
+export default function AnimatedCard({ children, onPress, style, noShadow, ...props }) {
+  const { colors } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
 
   const onPressIn = () => {

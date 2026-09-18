@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   FlatList,
   Linking,
@@ -15,6 +14,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -40,10 +40,12 @@ import {
   onBookingsSnapshot,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useNavigation } from '@react-navigation/native';
 import { hapticLight, hapticSuccess, hapticWarning } from '../utils/haptics';
 import { createStyleSheet } from '../utils/responsive';
 
-export default function AdminScreen({ navigation }) {
+export default function AdminScreen() {
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState('bookings');
   const [users, setUsers] = useState([]);
@@ -252,10 +254,10 @@ export default function AdminScreen({ navigation }) {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'approved': case 'completed': return '#4CAF50';
-      case 'pending': return '#FF9800';
-      case 'rejected': case 'cancelled': return '#F44336';
-      default: return '#999';
+      case 'approved': case 'completed': return colors.success;
+      case 'pending': return colors.warning;
+      case 'rejected': case 'cancelled': return colors.danger;
+      default: return colors.textSecondary;
     }
   };
 
@@ -264,7 +266,7 @@ export default function AdminScreen({ navigation }) {
       {selectMode && (
         <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }} onPress={() => toggleBookingSelection(item.id)}>
           <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: selectedBookings.includes(item.id) ? colors.primary : colors.border, backgroundColor: selectedBookings.includes(item.id) ? colors.primary : colors.card, justifyContent: 'center', alignItems: 'center' }}>
-            {selectedBookings.includes(item.id) && <Ionicons name="checkmark" size={16} color="#fff" />}
+            {selectedBookings.includes(item.id) && <Ionicons name="check" size={16} color="#fff" />}
           </View>
           <Text style={{ fontSize: 12, color: colors.textSecondary }}>Select this booking</Text>
         </TouchableOpacity>
@@ -284,7 +286,7 @@ export default function AdminScreen({ navigation }) {
           <Text style={styles.detailText}>{item.date} at {item.time}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="call" size={14} color={colors.textSecondary} />
+          <Ionicons name="phone" size={14} color={colors.textSecondary} />
           <Text style={styles.detailText}>{item.userEmail}</Text>
         </View>
         <View style={styles.detailRow}>
@@ -297,18 +299,18 @@ export default function AdminScreen({ navigation }) {
         {item.status === 'pending' && (
           <>
             <TouchableOpacity style={styles.approveButton} onPress={() => handleApproveBooking(item)}>
-              <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
               <Text style={styles.approveText}>Approve</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.rejectButton} onPress={() => handleRejectBooking(item)}>
-              <Ionicons name="close-circle" size={18} color="#F44336" />
+              <Ionicons name="close-circle" size={18} color={colors.danger} />
               <Text style={styles.rejectText}>Reject</Text>
             </TouchableOpacity>
           </>
         )}
         {item.status === 'approved' && (
           <TouchableOpacity style={styles.completeButton} onPress={() => handleCompleteBooking(item)}>
-            <Ionicons name="checkmark-done" size={18} color="#2196F3" />
+            <Ionicons name="checkmark-done" size={18} color={colors.info} />
             <Text style={styles.completeText}>Mark Complete</Text>
           </TouchableOpacity>
         )}
@@ -316,14 +318,14 @@ export default function AdminScreen({ navigation }) {
           style={styles.callButton}
           onPress={() => navigation.navigate('Chat', { receiverId: item.userId, receiverName: item.userName, conversationType: 'user' })}
         >
-          <Ionicons name="chatbubble" size={18} color={colors.primary} />
+          <Ionicons name="chat" size={18} color={colors.primary} />
           <Text style={[styles.callText, { color: colors.primary }]}>Message User</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.callButton}
           onPress={() => Linking.openURL(`tel:${item.businessPhone}`)}
         >
-          <Ionicons name="call" size={18} color={colors.textSecondary} />
+          <Ionicons name="phone" size={18} color={colors.textSecondary} />
           <Text style={styles.callText}>Call Business</Text>
         </TouchableOpacity>
       </View>
@@ -338,8 +340,8 @@ export default function AdminScreen({ navigation }) {
           <Text style={styles.cardSubtitle}>{item.category} - {item.address}</Text>
         </View>
         <View style={[styles.statusBadge, {
-          backgroundColor: item.approvalStatus === 'approved' ? '#4CAF50' :
-            item.approvalStatus === 'rejected' ? '#F44336' : '#FF9800'
+          backgroundColor: item.approvalStatus === 'approved' ? colors.success :
+            item.approvalStatus === 'rejected' ? colors.danger : colors.warning
         }]}>
           <Text style={styles.statusText}>{item.approvalStatus}</Text>
         </View>
@@ -348,17 +350,17 @@ export default function AdminScreen({ navigation }) {
         {item.approvalStatus === 'pending' && (
           <>
             <TouchableOpacity style={styles.approveButton} onPress={() => handleApproveBusiness(item)}>
-              <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
               <Text style={styles.approveText}>Approve</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.rejectButton} onPress={() => handleRejectBusiness(item)}>
-              <Ionicons name="close-circle" size={18} color="#F44336" />
+              <Ionicons name="close-circle" size={18} color={colors.danger} />
               <Text style={styles.rejectText}>Reject</Text>
             </TouchableOpacity>
           </>
         )}
         <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteBusiness(item)}>
-          <Ionicons name="trash" size={18} color="#999" />
+          <Ionicons name="trash" size={18} color={colors.textSecondary} />
           <Text style={styles.deleteText}>Delete</Text>
         </TouchableOpacity>
       </View>
@@ -372,7 +374,7 @@ export default function AdminScreen({ navigation }) {
           <Text style={styles.cardName}>{item.name}</Text>
           <Text style={styles.cardSubtitle}>{item.email}</Text>
         </View>
-        <View style={[styles.roleBadge, { backgroundColor: item.role === 'admin' ? '#E91E63' : item.role === 'provider' ? '#4CAF50' : '#2196F3' }]}>
+        <View style={[styles.roleBadge, { backgroundColor: item.role === 'admin' ? colors.danger : item.role === 'provider' ? colors.success : colors.info }]}>
           <Text style={styles.roleBadgeText}>{item.role}</Text>
         </View>
       </View>
@@ -382,12 +384,12 @@ export default function AdminScreen({ navigation }) {
       <View style={styles.cardActions}>
         {item.banned ? (
           <TouchableOpacity style={styles.unbanButton} onPress={() => { animateList(); unbanUser(item.id).then(loadData); }}>
-            <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
             <Text style={styles.unbanText}>Unban</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.banButton} onPress={() => handleBanUser(item)}>
-            <Ionicons name="ban" size={18} color="#F44336" />
+            <Ionicons name="block" size={18} color={colors.danger} />
             <Text style={styles.banText}>Ban</Text>
           </TouchableOpacity>
         )}
@@ -396,12 +398,12 @@ export default function AdminScreen({ navigation }) {
             style={styles.callButton}
             onPress={() => navigation.navigate('Chat', { receiverId: item.id, receiverName: item.name, conversationType: 'user' })}
           >
-            <Ionicons name="chatbubble" size={18} color={colors.primary} />
+            <Ionicons name="chat" size={18} color={colors.primary} />
             <Text style={[styles.callText, { color: colors.primary }]}>Message</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteUser(item)}>
-          <Ionicons name="trash" size={18} color="#999" />
+          <Ionicons name="trash" size={18} color={colors.textSecondary} />
           <Text style={styles.deleteText}>Delete</Text>
         </TouchableOpacity>
       </View>
@@ -414,14 +416,14 @@ export default function AdminScreen({ navigation }) {
         <View style={styles.cardInfo}>
           <View style={styles.reviewRating}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <Ionicons key={star} name={star <= item.rating ? 'star' : 'star-outline'} size={14} color="#FFD700" />
+              <Ionicons key={star} name={star <= item.rating ? 'star' : 'star-outline'} size={14} color={colors.warning} />
             ))}
           </View>
           <Text style={styles.reviewText} numberOfLines={2}>{item.text}</Text>
           <Text style={styles.cardSubtitle}>{new Date(item.date).toLocaleDateString()}</Text>
         </View>
         <TouchableOpacity onPress={() => handleDeleteReview(item)}>
-          <Ionicons name="trash" size={20} color="#F44336" />
+          <Ionicons name="trash" size={20} color={colors.danger} />
         </TouchableOpacity>
       </View>
     </View>
@@ -448,6 +450,12 @@ export default function AdminScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color={colors.headerText} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.headerText }]}>Admin Panel</Text>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar}>
         {tabs.map((tab) => (
           <TouchableOpacity
@@ -470,15 +478,15 @@ export default function AdminScreen({ navigation }) {
           <Text style={styles.analyticsTitle}>Platform Overview</Text>
           <View style={styles.analyticsGrid}>
             {[
-              { label: 'Total Users', value: analytics.totalUsers, icon: 'people', color: '#2196F3' },
-              { label: 'Total Bookings', value: analytics.totalBookings, icon: 'calendar', color: '#4CAF50' },
-              { label: 'This Week', value: analytics.weekBookings, icon: 'trending-up', color: '#FF9800' },
-              { label: 'Completed', value: analytics.completedBookings, icon: 'checkmark-done', color: '#9C27B0' },
-              { label: 'Pending', value: analytics.pendingBookings, icon: 'time', color: '#F44336' },
-              { label: 'Providers', value: analytics.totalProviders, icon: 'briefcase', color: '#00BCD4' },
-              { label: 'Businesses', value: analytics.totalBusinesses, icon: 'storefront', color: '#795548' },
-              { label: 'Avg Rating', value: analytics.avgRating, icon: 'star', color: '#FFD700' },
-              { label: 'Total Reviews', value: analytics.totalReviews, icon: 'chatbubble', color: '#E91E63' },
+              { label: 'Total Users', value: analytics.totalUsers, icon: 'people', color: colors.info },
+              { label: 'Total Bookings', value: analytics.totalBookings, icon: 'event', color: colors.success },
+              { label: 'This Week', value: analytics.weekBookings, icon: 'trending-up', color: colors.warning },
+              { label: 'Completed', value: analytics.completedBookings, icon: 'done-all', color: colors.purple },
+              { label: 'Pending', value: analytics.pendingBookings, icon: 'schedule', color: colors.danger },
+              { label: 'Providers', value: analytics.totalProviders, icon: 'work', color: colors.info },
+              { label: 'Businesses', value: analytics.totalBusinesses, icon: 'store', color: colors.textSecondary },
+              { label: 'Avg Rating', value: analytics.avgRating, icon: 'star', color: colors.warning },
+              { label: 'Total Reviews', value: analytics.totalReviews, icon: 'chat', color: colors.danger },
             ].map((item, idx) => (
               <View key={idx} style={styles.analyticsCard}>
                 <View style={[styles.analyticsIcon, { backgroundColor: item.color + '20' }]}>
@@ -494,10 +502,10 @@ export default function AdminScreen({ navigation }) {
             <Text style={[styles.chartTitle, { color: colors.text }]}>Bookings by Status</Text>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 120, gap: 8, paddingVertical: 16 }}>
               {[
-                { label: 'Pending', count: pendingBookings.length, color: '#FF9800' },
-                { label: 'Approved', count: approvedBookings.length, color: '#4CAF50' },
-                { label: 'Completed', count: bookings.filter(b => b.status === 'completed').length, color: '#2196F3' },
-                { label: 'Rejected', count: bookings.filter(b => b.status === 'rejected').length, color: '#F44336' },
+                { label: 'Pending', count: pendingBookings.length, color: colors.warning },
+                { label: 'Approved', count: approvedBookings.length, color: colors.success },
+                { label: 'Completed', count: bookings.filter(b => b.status === 'completed').length, color: colors.info },
+                { label: 'Rejected', count: bookings.filter(b => b.status === 'rejected').length, color: colors.danger },
               ].map((item, i) => {
                 const max = Math.max(pendingBookings.length, approvedBookings.length, bookings.filter(b => b.status === 'completed').length, bookings.filter(b => b.status === 'rejected').length, 1);
                 const height = (item.count / max) * 80;
@@ -552,7 +560,7 @@ export default function AdminScreen({ navigation }) {
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 6);
               const maxCat = Math.max(...sorted.map(([, c]) => c), 1);
-              const catColors = ['#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'];
+              const catColors = [colors.info, colors.success, colors.warning, colors.purple, colors.danger, colors.info];
               return sorted.length === 0 ? (
                 <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: 20 }}>No category data</Text>
               ) : (
@@ -579,7 +587,7 @@ export default function AdminScreen({ navigation }) {
                 if (r.rating >= 1 && r.rating <= 5) ratingCounts[r.rating - 1]++;
               });
               const maxRating = Math.max(...ratingCounts, 1);
-              const barColors = ['#F44336', '#FF9800', '#FFC107', '#8BC34A', '#4CAF50'];
+              const barColors = [colors.danger, colors.warning, colors.warning, colors.success, colors.success];
               return [5, 4, 3, 2, 1].map(star => {
                 const idx = star - 1;
                 const count = ratingCounts[idx];
@@ -587,7 +595,7 @@ export default function AdminScreen({ navigation }) {
                   <View key={star} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                     <View style={{ flexDirection: 'row', width: 70 }}>
                       {[1, 2, 3, 4, 5].map(s => (
-                        <Ionicons key={s} name={s <= star ? 'star' : 'star-outline'} size={12} color="#FFD700" />
+                        <Ionicons key={s} name={s <= star ? 'star' : 'star-outline'} size={12} color={colors.warning} />
                       ))}
                     </View>
                     <View style={{ flex: 1, height: 10, backgroundColor: colors.borderLight, borderRadius: 5, marginHorizontal: 8, overflow: 'hidden' }}>
@@ -619,11 +627,11 @@ export default function AdminScreen({ navigation }) {
               {selectMode && selectedBookings.length > 0 && (
                 <>
                   <TouchableOpacity style={styles.bulkApproveBtn} onPress={bulkApprove}>
-                    <Ionicons name="checkmark-done" size={18} color="#4CAF50" />
+                    <Ionicons name="checkmark-done" size={18} color={colors.success} />
                     <Text style={styles.bulkApproveText}>Approve ({selectedBookings.length})</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.bulkRejectBtn} onPress={bulkReject}>
-                    <Ionicons name="close-circle" size={18} color="#F44336" />
+                    <Ionicons name="close-circle" size={18} color={colors.danger} />
                     <Text style={styles.bulkRejectText}>Reject ({selectedBookings.length})</Text>
                   </TouchableOpacity>
                 </>
@@ -641,7 +649,7 @@ export default function AdminScreen({ navigation }) {
             ListEmptyComponent={
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
                 <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.borderLight, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-                  <Ionicons name="calendar-outline" size={36} color={colors.textMuted} />
+                  <Ionicons name="calendar" size={36} color={colors.textMuted} />
                 </View>
                 <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8 }}>No bookings</Text>
                 <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>No bookings have been made yet</Text>
@@ -663,7 +671,7 @@ export default function AdminScreen({ navigation }) {
           ListEmptyComponent={
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
               <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.borderLight, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-                <Ionicons name="storefront-outline" size={36} color={colors.textMuted} />
+                <Ionicons name="storefront" size={36} color={colors.textMuted} />
               </View>
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8 }}>No businesses</Text>
               <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>No businesses registered yet</Text>
@@ -705,7 +713,7 @@ export default function AdminScreen({ navigation }) {
           ListEmptyComponent={
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
               <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.borderLight, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-                <Ionicons name="star-outline" size={36} color={colors.textMuted} />
+                <Ionicons name="star-border" size={36} color={colors.textMuted} />
               </View>
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8 }}>No reviews</Text>
               <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>No reviews submitted yet</Text>
@@ -729,7 +737,7 @@ export default function AdminScreen({ navigation }) {
                   <Text style={styles.cardName}>{item.providerName}</Text>
                   <Text style={styles.cardSubtitle}>Reported by: {item.reporterName}</Text>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: '#FF9800' }]}>
+                <View style={[styles.statusBadge, { backgroundColor: colors.warning }]}>
                   <Text style={styles.statusText}>{item.category}</Text>
                 </View>
               </View>
@@ -737,8 +745,8 @@ export default function AdminScreen({ navigation }) {
               <Text style={styles.cardSubtitle}>{new Date(item.timestamp).toLocaleString()}</Text>
               <View style={styles.cardActions}>
                 <TouchableOpacity style={styles.deleteButton} onPress={async () => { animateList(); await deleteReport(item.id); loadData(); }}>
-                  <Ionicons name="trash" size={18} color="#F44336" />
-                  <Text style={[styles.deleteText, { color: '#F44336' }]}>Dismiss</Text>
+                  <Ionicons name="trash" size={18} color={colors.danger} />
+                  <Text style={[styles.deleteText, { color: colors.danger }]}>Dismiss</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -746,7 +754,7 @@ export default function AdminScreen({ navigation }) {
           ListEmptyComponent={
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
               <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.borderLight, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-                <Ionicons name="flag-outline" size={36} color={colors.textMuted} />
+                <Ionicons name="flag" size={36} color={colors.textMuted} />
               </View>
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8 }}>No reports</Text>
               <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>No reports have been submitted</Text>
@@ -762,6 +770,17 @@ const getStyles = (colors) => createStyleSheet({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   tabBar: {
     backgroundColor: colors.card,
@@ -855,7 +874,7 @@ const getStyles = (colors) => createStyleSheet({
     textTransform: 'uppercase',
   },
   bannedBadge: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: colors.dangerLight,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -865,7 +884,7 @@ const getStyles = (colors) => createStyleSheet({
   bannedText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#F44336',
+    color: colors.danger,
   },
   cardActions: {
     flexDirection: 'row',
@@ -882,7 +901,7 @@ const getStyles = (colors) => createStyleSheet({
   approveText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.success,
     fontWeight: '600',
   },
   rejectButton: {
@@ -892,7 +911,7 @@ const getStyles = (colors) => createStyleSheet({
   rejectText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#F44336',
+    color: colors.danger,
     fontWeight: '600',
   },
   completeButton: {
@@ -902,7 +921,7 @@ const getStyles = (colors) => createStyleSheet({
   completeText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#2196F3',
+    color: colors.info,
     fontWeight: '600',
   },
   banButton: {
@@ -912,7 +931,7 @@ const getStyles = (colors) => createStyleSheet({
   banText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#F44336',
+    color: colors.danger,
     fontWeight: '600',
   },
   unbanButton: {
@@ -922,7 +941,7 @@ const getStyles = (colors) => createStyleSheet({
   unbanText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.success,
     fontWeight: '600',
   },
   callButton: {
@@ -1051,12 +1070,12 @@ const getStyles = (colors) => createStyleSheet({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 14,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.successLight,
     gap: 4,
   },
   bulkApproveText: {
     fontSize: 13,
-    color: '#4CAF50',
+    color: colors.success,
     fontWeight: '600',
   },
   bulkRejectBtn: {
@@ -1065,12 +1084,12 @@ const getStyles = (colors) => createStyleSheet({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 14,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.dangerLight,
     gap: 4,
   },
   bulkRejectText: {
     fontSize: 13,
-    color: '#F44336',
+    color: colors.danger,
     fontWeight: '600',
   },
 });

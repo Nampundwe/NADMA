@@ -19,7 +19,7 @@ export default class ErrorBoundary extends React.Component {
       return (
         <View style={styles.container}>
           <View style={styles.iconCircle}>
-            <Ionicons name="warning-outline" size={40} color="#EE5D50" />
+            <Ionicons name="warning" size={40} color="#EE5D50" />
           </View>
           <Text style={styles.title}>Something went wrong</Text>
           <Text style={styles.subtitle}>Please try again</Text>

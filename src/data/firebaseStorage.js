@@ -1,10 +1,14 @@
-import { auth, db, storage } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail, sendEmailVerification, reload } from 'firebase/auth';
 import {
   collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, writeBatch, onSnapshot, add
+  query, where, orderBy, writeBatch, onSnapshot, addDoc
 } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import {
+  uploadCommunityImage as uploadCommunityImageCloudinary,
+  uploadImage as uploadImageCloudinary,
+  uploadImageDetailed as uploadImageDetailedCloudinary,
+} from '../utils/cloudinaryUpload';
 
 const FIRST_ADMIN_EMAIL = 'munangimuyambangorodwell@gmail.com';
 
@@ -52,12 +56,16 @@ const COLLECTIONS = {
   categories: 'categories',
   settings: 'settings',
   follows: 'follows',
+  presence: 'presence',
+  savedPosts: 'savedPosts',
+  blockedUsers: 'blockedUsers',
 };
 
 const col = (name) => collection(db, name);
 const ref = (name, id) => doc(db, name, id);
 const get = (name, id) => getDoc(ref(name, id));
 const getAll = (name) => getDocs(col(name));
+const getAllDocs = getAll;
 const set = (name, id, data) => setDoc(ref(name, id), data);
 const update = (name, id, data) => updateDoc(ref(name, id), data);
 const remove = (name, id) => deleteDoc(ref(name, id));
@@ -397,6 +405,51 @@ export const unbanUser = async (userId) => {
     return true;
   } catch (error) {
     return false;
+  }
+};
+
+export const blockUser = async (blockerId, blockedId) => {
+  try {
+    const id = `${blockerId}_${blockedId}`;
+    await set(COLLECTIONS.blockedUsers, id, {
+      id,
+      blockerId,
+      blockedId,
+      timestamp: new Date().toISOString(),
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const unblockUser = async (blockerId, blockedId) => {
+  try {
+    const id = `${blockerId}_${blockedId}`;
+    await remove(COLLECTIONS.blockedUsers, id);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const isBlocked = async (blockerId, blockedId) => {
+  try {
+    const id = `${blockerId}_${blockedId}`;
+    const snap = await get(COLLECTIONS.blockedUsers, id);
+    return snap.exists();
+  } catch (error) {
+    return false;
+  }
+};
+
+export const getBlockedUsers = async (userId) => {
+  try {
+    const snapshot = await getAllDocs(COLLECTIONS.blockedUsers);
+    const all = await fetchAllDocs(snapshot);
+    return all.filter((b) => b.blockerId === userId).map((b) => b.blockedId);
+  } catch (error) {
+    return [];
   }
 };
 
@@ -810,6 +863,19 @@ export const updateBookingStatus = async (bookingId, status) => {
         timestamp: new Date().toISOString(),
         read: false,
       });
+      if (status === 'completed') {
+        await addNotification({
+          id: 'notif_rate_' + Date.now(),
+          userId: booking.userId,
+          type: 'booking_update',
+          title: 'Rate Your Experience',
+          message: `How was your service with ${booking.businessName}? Leave a review to help others.`,
+          bookingId: booking.id,
+          businessId: booking.businessId,
+          timestamp: new Date().toISOString(),
+          read: false,
+        });
+      }
       const providerSnap = await get(COLLECTIONS.providers, booking.businessId);
       if (providerSnap.exists()) {
         const provider = providerSnap.data();
@@ -875,10 +941,16 @@ export const sendMessage = async (message) => {
         userId: receiverId,
         type: 'message',
         title: message.senderName || 'New Message',
+        message: message.text?.substring(0, 100) || 'Sent a photo',
         body: message.text?.substring(0, 100) || 'Sent a message',
         senderId: message.senderId,
         senderName: message.senderName,
+        receiverName: message.receiverName,
+        businessId: message.businessId || null,
+        businessName: message.businessName || null,
+        conversationType: message.conversationType || 'user',
         read: false,
+        timestamp: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       });
     } catch (e) {}
@@ -887,6 +959,77 @@ export const sendMessage = async (message) => {
     return false;
   }
 };
+
+export const deleteMessage = async (messageId) => {
+  try {
+    await remove(COLLECTIONS.messages, messageId);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const setTypingStatus = async (userId, chatId, isTyping) => {
+  try {
+    const id = `typing_${userId}_${chatId}`;
+    if (isTyping) {
+      await set(COLLECTIONS.presence, id, { userId, chatId, isTyping: true, timestamp: new Date().toISOString() });
+    } else {
+      await remove(COLLECTIONS.presence, id);
+    }
+  } catch (e) {}
+};
+
+export const onTypingSnapshot = (chatId, callback) => {
+  try {
+    const q = query(col(COLLECTIONS.presence), where('chatId', '==', chatId), where('isTyping', '==', true));
+    return onSnapshot(q, (snap) => {
+      const typingUsers = snap.docs.map(d => d.data().userId);
+      callback(typingUsers);
+    }, () => callback([]));
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const toggleMessageReaction = async (messageId, userId, emoji) => {
+  try {
+    const snap = await get(COLLECTIONS.messages, messageId);
+    if (!snap.exists()) return false;
+    const msg = snap.data();
+    const reactions = msg.reactions || {};
+    if (reactions[userId] === emoji) {
+      delete reactions[userId];
+    } else {
+      reactions[userId] = emoji;
+    }
+    await update(COLLECTIONS.messages, messageId, { reactions });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const forwardMessage = async (message, toUserId, toUserName) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return false;
+    return await sendMessage({
+      senderId: user.id,
+      senderName: user.name,
+      receiverId: toUserId,
+      receiverName: toUserName,
+      text: message.text,
+      imageUrl: message.imageUrl || null,
+      forwarded: true,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return false;
+  }
+};
+
+export const MESSAGE_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
 export const getAllMessages = async () => {
   try {
@@ -1154,6 +1297,39 @@ export const addCommunityPost = async (post) => {
         }
       } catch (e) {}
     }
+    if (post.reposted && post.originalAuthorId && post.originalAuthorId !== post.userId) {
+      await addNotification({
+        userId: post.originalAuthorId,
+        type: 'repost',
+        title: 'New Repost',
+        message: `${post.userName} reposted your post${post.title ? `: "${post.title}"` : ''}`,
+        postId: id,
+        senderId: post.userId,
+        senderName: post.userName,
+        read: false,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    if (post.category !== 'News') {
+      try {
+        const followerIds = await getUserFollowerIds(post.userId);
+        for (const fId of followerIds) {
+          if (fId !== post.userId) {
+            await addNotification({
+              userId: fId,
+              type: 'post',
+              title: 'New Post',
+              message: `${post.userName} shared${post.title ? ` "${post.title}"` : ' a new post'}`,
+              postId: id,
+              senderId: post.userId,
+              senderName: post.userName,
+              read: false,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (e) {}
+    }
     return true;
   } catch (error) {
     return false;
@@ -1163,29 +1339,15 @@ export const addCommunityPost = async (post) => {
 export const createPost = addCommunityPost;
 
 export const uploadCommunityImage = async (postId, uri) => {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const imageRef = storageRef(storage, `community-images/${postId}.jpg`);
-    await uploadBytes(imageRef, blob);
-    const url = await getDownloadURL(imageRef);
-    return url;
-  } catch (error) {
-    return null;
-  }
+  return uploadCommunityImageCloudinary(postId, uri);
 };
 
 export const uploadImage = async (path, uri) => {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const imageRef = storageRef(storage, path);
-    await uploadBytes(imageRef, blob);
-    const url = await getDownloadURL(imageRef);
-    return url;
-  } catch (error) {
-    return null;
-  }
+  return uploadImageCloudinary(path, uri);
+};
+
+export const uploadImageDetailed = async (path, uri) => {
+  return uploadImageDetailedCloudinary(path, uri);
 };
 
 export const getCommunityPosts = async () => {
@@ -1213,7 +1375,7 @@ export const deletePost = deleteCommunityPost;
 export const addPostComment = async (postId, comment) => {
   try {
     const commentsRef = collection(db, 'posts', postId, 'comments');
-    await add(commentsRef, comment);
+    await addDoc(commentsRef, comment);
     const postSnap = await getDoc(doc(db, 'posts', postId));
     if (postSnap.exists()) {
       const post = postSnap.data();
@@ -1319,6 +1481,117 @@ export const unlikePost = async (postId, userId) => {
     return true;
   } catch (error) {
     return false;
+  }
+};
+
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+export const REACTION_LABELS = ['Like', 'Love', 'Haha', 'Wow', 'Sad', 'Angry'];
+
+export const togglePostReaction = async (postId, userId, userName, reaction) => {
+  try {
+    const snap = await get(COLLECTIONS.posts, postId);
+    if (!snap.exists()) return false;
+    const post = snap.data();
+    const reactions = post.reactions || {};
+    const prevReaction = reactions[userId];
+    if (prevReaction === reaction) {
+      delete reactions[userId];
+    } else {
+      reactions[userId] = reaction;
+    }
+    await update(COLLECTIONS.posts, postId, { reactions });
+    if (!prevReaction && post.userId && post.userId !== userId) {
+      const reactionIdx = REACTIONS.indexOf(reaction);
+      const label = reactionIdx >= 0 ? REACTION_LABELS[reactionIdx] : 'reacted';
+      await addNotification({
+        userId: post.userId,
+        type: 'post_reaction',
+        title: 'New Reaction',
+        message: `${userName || 'Someone'} ${label.toLowerCase()} your post`,
+        postId,
+        senderId: userId,
+        senderName: userName,
+        read: false,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const deleteComment = async (postId, commentId) => {
+  try {
+    await remove(`posts/${postId}/comments`, commentId);
+    const postSnap = await getDoc(doc(db, 'posts', postId));
+    if (postSnap.exists()) {
+      const count = (postSnap.data().commentCount || 1) - 1;
+      await updateDoc(doc(db, 'posts', postId), { commentCount: Math.max(0, count) });
+    }
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const toggleCommentLike = async (postId, commentId, userId) => {
+  try {
+    const commentRef = doc(db, 'posts', postId, 'comments', commentId);
+    const snap = await getDoc(commentRef);
+    if (!snap.exists()) return false;
+    const comment = snap.data();
+    const likes = comment.likes || [];
+    const idx = likes.indexOf(userId);
+    if (idx === -1) {
+      likes.push(userId);
+    } else {
+      likes.splice(idx, 1);
+    }
+    await updateDoc(commentRef, { likes });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const savePost = async (userId, postId) => {
+  try {
+    const id = `${userId}_${postId}`;
+    await set(COLLECTIONS.savedPosts, id, { userId, postId, createdAt: new Date().toISOString() });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const unsavePost = async (userId, postId) => {
+  try {
+    const id = `${userId}_${postId}`;
+    await remove(COLLECTIONS.savedPosts, id);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const isPostSaved = async (userId, postId) => {
+  try {
+    const id = `${userId}_${postId}`;
+    const snap = await get(COLLECTIONS.savedPosts, id);
+    return snap.exists();
+  } catch (error) {
+    return false;
+  }
+};
+
+export const onSavedPostsSnapshot = (userId, callback) => {
+  try {
+    return onSnapshot(query(col(COLLECTIONS.savedPosts), where('userId', '==', userId)), (snap) => {
+      callback(snap.docs.map(d => d.data().postId));
+    }, () => callback([]));
+  } catch (e) {
+    return () => {};
   }
 };
 
@@ -1687,16 +1960,19 @@ export const onNotificationsSnapshot = (userId, callback) => {
 
 export const onMessagesSnapshot = (userId, otherUserId, callback) => {
   try {
-    const q1 = query(col(COLLECTIONS.messages), where('senderId', '==', userId), where('receiverId', '==', otherUserId));
-    const q2 = query(col(COLLECTIONS.messages), where('senderId', '==', otherUserId), where('receiverId', '==', userId));
+    const q1 = query(col(COLLECTIONS.messages), where('senderId', '==', userId));
+    const q2 = query(col(COLLECTIONS.messages), where('receiverId', '==', userId));
     let msgs1 = [];
     let msgs2 = [];
     const emit = () => {
-      const all = [...msgs1, ...msgs2].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const all = [...msgs1, ...msgs2].filter(m =>
+        (m.senderId === userId && m.receiverId === otherUserId) ||
+        (m.senderId === otherUserId && m.receiverId === userId)
+      ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       callback(all);
     };
-    const unsub1 = onSnapshot(q1, (snap) => { msgs1 = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit(); }, () => {});
-    const unsub2 = onSnapshot(q2, (snap) => { msgs2 = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit(); }, () => {});
+    const unsub1 = onSnapshot(q1, (snap) => { msgs1 = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit(); }, (err) => { console.warn('onMessagesSnapshot q1 error:', err?.message); });
+    const unsub2 = onSnapshot(q2, (snap) => { msgs2 = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit(); }, (err) => { console.warn('onMessagesSnapshot q2 error:', err?.message); });
     return () => { unsub1(); unsub2(); };
   } catch (e) {
     return () => {};
@@ -1744,8 +2020,8 @@ export const onConversationsSnapshot = (userId, callback, filterType = null) => 
       );
       callback(result);
     };
-    const unsub1 = onSnapshot(q1, (snap) => { msgs1 = snap.docs.map(d => ({ id: d.id, ...d.data() })); process(); }, () => {});
-    const unsub2 = onSnapshot(q2, (snap) => { msgs2 = snap.docs.map(d => ({ id: d.id, ...d.data() })); process(); }, () => {});
+    const unsub1 = onSnapshot(q1, (snap) => { msgs1 = snap.docs.map(d => ({ id: d.id, ...d.data() })); process(); }, (err) => { console.warn('onConversationsSnapshot q1 error:', err?.message); });
+    const unsub2 = onSnapshot(q2, (snap) => { msgs2 = snap.docs.map(d => ({ id: d.id, ...d.data() })); process(); }, (err) => { console.warn('onConversationsSnapshot q2 error:', err?.message); });
     return () => { unsub1(); unsub2(); };
   } catch (e) {
     return () => {};
@@ -1754,10 +2030,26 @@ export const onConversationsSnapshot = (userId, callback, filterType = null) => 
 
 export const onPostsSnapshot = (callback) => {
   try {
-    return onSnapshot(col(COLLECTIONS.posts), (snap) => {
+    return onSnapshot(col(COLLECTIONS.posts), async (snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       docs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      callback(docs);
+      const userIds = [...new Set(docs.map(d => d.userId).filter(Boolean))];
+      const userMap = {};
+      await Promise.all(userIds.map(async (uid) => {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            userMap[uid] = { profileImage: data.profileImage || null, name: data.name || null };
+          }
+        } catch (e) {}
+      }));
+      const enriched = docs.map(d => ({
+        ...d,
+        userProfileImage: d.userProfileImage || userMap[d.userId]?.profileImage || null,
+        userName: d.userName || userMap[d.userId]?.name || d.userName,
+      }));
+      callback(enriched);
     }, (error) => {
       callback([]);
     });
@@ -1867,7 +2159,7 @@ export const isFollowing = async (followerId, targetId) => {
   }
 };
 
-export const toggleFollow = async (followerId, targetId, targetType = 'user') => {
+export const toggleFollow = async (followerId, targetId, targetType = 'user', followerName = '') => {
   try {
     if (!followerId || !targetId) return false;
     if (followerId === targetId) return false;
@@ -1883,13 +2175,25 @@ export const toggleFollow = async (followerId, targetId, targetType = 'user') =>
       targetType,
       createdAt: new Date().toISOString(),
     });
+    if (targetType === 'user') {
+      await addNotification({
+        userId: targetId,
+        type: 'follow',
+        title: 'New Follower',
+        message: `${followerName || 'Someone'} started following you`,
+        senderId: followerId,
+        senderName: followerName || '',
+        read: false,
+        timestamp: new Date().toISOString(),
+      });
+    }
     return true;
   } catch (error) {
     return false;
   }
 };
 
-export const follow = async (followerId, targetId, targetType = 'user') => {
+export const follow = async (followerId, targetId, targetType = 'user', followerName = '') => {
   try {
     if (!followerId || !targetId) return false;
     const docId = followDocId(followerId, targetId);
@@ -1901,6 +2205,18 @@ export const follow = async (followerId, targetId, targetType = 'user') => {
       targetType,
       createdAt: new Date().toISOString(),
     });
+    if (targetType === 'user') {
+      await addNotification({
+        userId: targetId,
+        type: 'follow',
+        title: 'New Follower',
+        message: `${followerName || 'Someone'} started following you`,
+        senderId: followerId,
+        senderName: followerName || '',
+        read: false,
+        timestamp: new Date().toISOString(),
+      });
+    }
     return true;
   } catch (error) {
     return false;
@@ -1968,6 +2284,95 @@ export const onUserFollowsSnapshot = (userId, callback) => {
     });
   } catch (e) {
     return () => {};
+  }
+};
+
+// ============ PUBLIC USER PROFILES / QUALIFICATIONS ============
+export const getUserById = async (userId) => {
+  try {
+    if (!userId) return null;
+    const snap = await get(COLLECTIONS.users, userId);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  } catch (error) {
+    return null;
+  }
+};
+
+export const onUserSnapshot = (userId, callback) => {
+  try {
+    if (!userId) { callback(null); return () => {}; }
+    return onSnapshot(doc(db, COLLECTIONS.users, userId), (snap) => {
+      if (snap.exists()) {
+        callback({ id: snap.id, ...snap.data() });
+      } else {
+        callback(null);
+      }
+    }, (error) => {
+      callback(null);
+    });
+  } catch (e) {
+    return () => {};
+  }
+};
+
+export const getUserPostsCount = async (userId) => {
+  try {
+    if (!userId) return 0;
+    const snapshot = await queryWhere(COLLECTIONS.posts, 'userId', '==', userId);
+    return snapshot.size;
+  } catch (error) {
+    return 0;
+  }
+};
+
+export const updateUserProfile = async (userId, updates) => {
+  try {
+    if (!userId) return false;
+    await update(COLLECTIONS.users, userId, updates);
+    if (localCurrentUser && localCurrentUser.id === userId) {
+      localCurrentUser = { ...localCurrentUser, ...updates };
+    }
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const endorseUserSkill = async (userId, skillName, endorserName) => {
+  try {
+    if (!userId || !skillName) return false;
+    const snap = await get(COLLECTIONS.users, userId);
+    if (!snap.exists()) return false;
+    const data = snap.data();
+    const skills = Array.isArray(data.skills) ? data.skills : [];
+    const idx = skills.findIndex((s) => (typeof s === 'string' ? s === skillName : s.name === skillName));
+    let updated;
+    if (idx === -1) {
+      updated = [...skills, { name: skillName, endorsements: 1, endorsers: endorserName ? [endorserName] : [] }];
+    } else {
+      updated = skills.map((s, i) => {
+        if (i !== idx) return s;
+        const current = typeof s === 'string' ? { name: s, endorsements: 0, endorsers: [] } : { ...s };
+        const endorsers = Array.isArray(current.endorsers) ? current.endorsers : [];
+        if (endorserName && endorsers.includes(endorserName)) {
+          return {
+            ...current,
+            endorsements: Math.max(0, (current.endorsements || 0) - 1),
+            endorsers: endorsers.filter((n) => n !== endorserName),
+          };
+        }
+        return {
+          ...current,
+          endorsements: (current.endorsements || 0) + 1,
+          endorsers: endorserName ? [...endorsers, endorserName] : endorsers,
+        };
+      });
+    }
+    await update(COLLECTIONS.users, userId, { skills: updated });
+    return true;
+  } catch (error) {
+    return false;
   }
 };
 

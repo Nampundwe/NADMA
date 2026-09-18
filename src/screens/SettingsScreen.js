@@ -2,16 +2,16 @@ import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
-
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Switch,
   Alert,
   StatusBar,
   Modal,
-  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -165,7 +165,7 @@ export default function SettingsScreen({ navigation }) {
       <StatusBar barStyle={colors.statusBar} backgroundColor={colors.headerBg} />
       <View style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
-          <Ionicons name="chevron-back" size={24} color={colors.headerText} />
+          <Ionicons name="chevron-left" size={24} color={colors.headerText} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Settings</Text>
         <View style={{ width: 32 }} />
@@ -176,8 +176,8 @@ export default function SettingsScreen({ navigation }) {
         <Text style={s.sectionTitle}>NOTIFICATIONS</Text>
         <View style={s.sectionCard}>
           <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: '#FF980015' }]}>
-              <Ionicons name="notifications" size={20} color="#FF9800" />
+            <View style={[s.settingIcon, { backgroundColor: colors.warningLight }]}>
+              <Ionicons name="notifications" size={20} color={colors.warning} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Push Notifications</Text>
@@ -186,14 +186,14 @@ export default function SettingsScreen({ navigation }) {
             <Switch
               value={settings.notifications}
               onValueChange={(v) => updateSetting('notifications', v)}
-              trackColor={{ false: colors.border, true: '#BBDEFB' }}
+              trackColor={{ false: colors.border, true: colors.infoLight }}
               thumbColor={settings.notifications ? colors.primary : colors.textMuted}
               accessibilityLabel="Push notifications"
             />
           </View>
           <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: '#2196F315' }]}>
-              <Ionicons name="mail" size={20} color="#2196F3" />
+            <View style={[s.settingIcon, { backgroundColor: colors.infoLight }]}>
+              <Ionicons name="mail" size={20} color={colors.info} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Email Notifications</Text>
@@ -202,7 +202,7 @@ export default function SettingsScreen({ navigation }) {
             <Switch
               value={settings.emailNotifications}
               onValueChange={(v) => updateSetting('emailNotifications', v)}
-              trackColor={{ false: colors.border, true: '#BBDEFB' }}
+              trackColor={{ false: colors.border, true: colors.infoLight }}
               thumbColor={settings.emailNotifications ? colors.primary : colors.textMuted}
               accessibilityLabel="Email notifications"
             />
@@ -213,8 +213,8 @@ export default function SettingsScreen({ navigation }) {
         <Text style={s.sectionTitle}>APPEARANCE</Text>
         <View style={s.sectionCard}>
           <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: '#673AB715' }]}>
-              <Ionicons name="moon" size={20} color="#673AB7" />
+            <View style={[s.settingIcon, { backgroundColor: colors.purpleLight }]}>
+              <Ionicons name="dark-mode" size={20} color={colors.purple} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Dark Mode</Text>
@@ -223,14 +223,14 @@ export default function SettingsScreen({ navigation }) {
             <Switch
               value={isDark}
               onValueChange={toggleTheme}
-              trackColor={{ false: colors.border, true: '#BBDEFB' }}
+              trackColor={{ false: colors.border, true: colors.infoLight }}
               thumbColor={isDark ? colors.primary : colors.textMuted}
               accessibilityLabel="Dark mode"
             />
           </View>
           <TouchableOpacity style={s.settingRow} activeOpacity={0.7} onPress={() => setShowLanguageModal(true)} accessibilityLabel="Select language" accessibilityRole="button">
-            <View style={[s.settingIcon, { backgroundColor: '#4CAF5015' }]}>
-              <Ionicons name="language" size={20} color="#4CAF50" />
+            <View style={[s.settingIcon, { backgroundColor: colors.successLight }]}>
+              <Ionicons name="language" size={20} color={colors.success} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Language</Text>
@@ -238,7 +238,7 @@ export default function SettingsScreen({ navigation }) {
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Text style={s.settingValue}>{languageLabel}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              <Ionicons name="chevron-right" size={16} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
         </View>
@@ -247,8 +247,8 @@ export default function SettingsScreen({ navigation }) {
         <Text style={s.sectionTitle}>PRIVACY</Text>
         <View style={s.sectionCard}>
           <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: '#E91E6315' }]}>
-              <Ionicons name="call" size={20} color="#E91E63" />
+            <View style={[s.settingIcon, { backgroundColor: colors.dangerLight }]}>
+              <Ionicons name="phone" size={20} color={colors.danger} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Show Phone Number</Text>
@@ -257,14 +257,14 @@ export default function SettingsScreen({ navigation }) {
             <Switch
               value={settings.showPhone}
               onValueChange={(v) => updateSetting('showPhone', v)}
-              trackColor={{ false: colors.border, true: '#BBDEFB' }}
+              trackColor={{ false: colors.border, true: colors.infoLight }}
               thumbColor={settings.showPhone ? colors.primary : colors.textMuted}
               accessibilityLabel="Show phone number"
             />
           </View>
           <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: '#FF980015' }]}>
-              <Ionicons name="mail" size={20} color="#FF9800" />
+            <View style={[s.settingIcon, { backgroundColor: colors.warningLight }]}>
+              <Ionicons name="mail" size={20} color={colors.warning} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Show Email</Text>
@@ -273,14 +273,14 @@ export default function SettingsScreen({ navigation }) {
             <Switch
               value={settings.showEmail}
               onValueChange={(v) => updateSetting('showEmail', v)}
-              trackColor={{ false: colors.border, true: '#BBDEFB' }}
+              trackColor={{ false: colors.border, true: colors.infoLight }}
               thumbColor={settings.showEmail ? colors.primary : colors.textMuted}
               accessibilityLabel="Show email"
             />
           </View>
           <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: '#4CAF5015' }]}>
-              <Ionicons name="location" size={20} color="#4CAF50" />
+            <View style={[s.settingIcon, { backgroundColor: colors.successLight }]}>
+              <Ionicons name="location-on" size={20} color={colors.success} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Location Sharing</Text>
@@ -289,14 +289,14 @@ export default function SettingsScreen({ navigation }) {
             <Switch
               value={settings.locationSharing}
               onValueChange={(v) => updateSetting('locationSharing', v)}
-              trackColor={{ false: colors.border, true: '#BBDEFB' }}
+              trackColor={{ false: colors.border, true: colors.infoLight }}
               thumbColor={settings.locationSharing ? colors.primary : colors.textMuted}
               accessibilityLabel="Location sharing"
             />
           </View>
           <View style={[s.settingRow, { borderBottomWidth: 0 }]}>
-            <View style={[s.settingIcon, { backgroundColor: '#9C27B015' }]}>
-              <Ionicons name="bar-chart" size={20} color="#9C27B0" />
+            <View style={[s.settingIcon, { backgroundColor: colors.purpleLight }]}>
+              <Ionicons name="bar-chart" size={20} color={colors.purple} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Usage Analytics</Text>
@@ -305,7 +305,7 @@ export default function SettingsScreen({ navigation }) {
             <Switch
               value={settings.analyticsOptIn}
               onValueChange={(v) => updateSetting('analyticsOptIn', v)}
-              trackColor={{ false: colors.border, true: '#BBDEFB' }}
+              trackColor={{ false: colors.border, true: colors.infoLight }}
               thumbColor={settings.analyticsOptIn ? colors.primary : colors.textMuted}
               accessibilityLabel="Usage analytics"
             />
@@ -316,14 +316,14 @@ export default function SettingsScreen({ navigation }) {
         <Text style={s.sectionTitle}>ACCOUNT</Text>
         <View style={s.sectionCard}>
           <TouchableOpacity style={s.settingRow} activeOpacity={0.7} onPress={() => setShowPasswordModal(true)} accessibilityLabel="Change password" accessibilityRole="button">
-            <View style={[s.settingIcon, { backgroundColor: '#F4433615' }]}>
-              <Ionicons name="lock-closed" size={20} color="#F44336" />
+            <View style={[s.settingIcon, { backgroundColor: colors.dangerLight }]}>
+              <Ionicons name="lock" size={20} color={colors.danger} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Change Password</Text>
               <Text style={s.settingDesc}>Update your account password</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.settingRow, { borderBottomWidth: 0 }]}
@@ -335,14 +335,14 @@ export default function SettingsScreen({ navigation }) {
             accessibilityLabel="Export my data"
             accessibilityRole="button"
           >
-            <View style={[s.settingIcon, { backgroundColor: '#2196F315' }]}>
-              <Ionicons name="download" size={20} color="#2196F3" />
+            <View style={[s.settingIcon, { backgroundColor: colors.infoLight }]}>
+              <Ionicons name="download" size={20} color={colors.info} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Export My Data</Text>
               <Text style={s.settingDesc}>Download a copy of your account data</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -350,8 +350,8 @@ export default function SettingsScreen({ navigation }) {
         <Text style={s.sectionTitle}>STORAGE</Text>
         <View style={s.sectionCard}>
           <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: '#79554815' }]}>
-              <Ionicons name="folder" size={20} color="#795548" />
+            <View style={[s.settingIcon, { backgroundColor: colors.borderLight }]}>
+              <Ionicons name="folder" size={20} color={colors.textSecondary} />
             </View>
             <View style={s.settingInfo}>
               <Text style={s.settingLabel}>Local Cache</Text>
@@ -359,20 +359,20 @@ export default function SettingsScreen({ navigation }) {
             </View>
           </View>
           <TouchableOpacity style={[s.settingRow, { borderBottomWidth: 0 }]} activeOpacity={0.7} onPress={handleClearCache} accessibilityLabel="Clear app cache" accessibilityRole="button">
-            <View style={[s.settingIcon, { backgroundColor: '#FF572215' }]}>
-              <Ionicons name="trash" size={20} color="#FF5722" />
+            <View style={[s.settingIcon, { backgroundColor: colors.dangerLight }]}>
+              <Ionicons name="trash" size={20} color={colors.danger} />
             </View>
             <View style={s.settingInfo}>
-              <Text style={[s.settingLabel, { color: '#FF5722' }]}>Clear Cache</Text>
+              <Text style={[s.settingLabel, { color: colors.danger }]}>Clear Cache</Text>
               <Text style={s.settingDesc}>Free up storage space</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
         {/* Danger Zone */}
         <Text style={s.sectionTitle}>DANGER ZONE</Text>
-        <View style={[s.sectionCard, { borderColor: isDark ? '#5C2020' : '#FEE2E2', borderWidth: 1 }]}>
+        <View style={[s.sectionCard, { borderColor: isDark ? colors.danger : colors.dangerLight, borderWidth: 1 }]}>
           <TouchableOpacity
             style={[s.settingRow, { borderBottomWidth: 0 }]}
             activeOpacity={0.7}
@@ -380,14 +380,14 @@ export default function SettingsScreen({ navigation }) {
             accessibilityLabel="Delete account"
             accessibilityRole="button"
           >
-            <View style={[s.settingIcon, { backgroundColor: '#F4433615' }]}>
-              <Ionicons name="warning" size={20} color="#F44336" />
+            <View style={[s.settingIcon, { backgroundColor: colors.dangerLight }]}>
+              <Ionicons name="warning" size={20} color={colors.danger} />
             </View>
             <View style={s.settingInfo}>
-              <Text style={[s.settingLabel, { color: '#F44336' }]}>Delete Account</Text>
+              <Text style={[s.settingLabel, { color: colors.danger }]}>Delete Account</Text>
               <Text style={s.settingDesc}>Permanently remove all your data</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -426,16 +426,16 @@ export default function SettingsScreen({ navigation }) {
           <View style={s.modalContent} onStartShouldSetResponder={() => true}>
             <View style={s.modalHandle} />
             <View style={{ alignItems: 'center', marginBottom: 16 }}>
-              <View style={[s.warningIcon, { backgroundColor: isDark ? '#5C202020' : '#FEE2E2' }]}>
-                <Ionicons name="warning" size={36} color="#F44336" />
+              <View style={[s.warningIcon, { backgroundColor: colors.dangerLight }]}>
+                <Ionicons name="warning" size={36} color={colors.danger} />
               </View>
             </View>
             <Text style={s.modalTitle}>Delete Account?</Text>
             <Text style={s.modalSubtitle}>This will permanently delete your account, bookings, reviews, and all data.</Text>
-            <TouchableOpacity style={[s.modalBtn, { backgroundColor: '#F44336' }]} onPress={handleDeleteAccount} accessibilityLabel="Delete account permanently" accessibilityRole="button">
+            <TouchableOpacity style={[s.modalBtn, { backgroundColor: colors.danger }]} onPress={handleDeleteAccount} accessibilityLabel="Delete account permanently" accessibilityRole="button">
               <Text style={s.modalBtnText}>Yes, Delete My Account</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[s.modalBtn, { backgroundColor: colors.borderLight }]} onPress={() => setShowDeleteModal(false)} accessibilityLabel="Cancel" accessibilityRole="button">
+            <TouchableOpacity style={[s.modalBtn, { backgroundColor: colors.borderLight }]} onPress={() => setShowDeleteModal(false)} accessibilityLabel="close-circle" accessibilityRole="button">
               <Text style={[s.modalBtnText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -444,6 +444,7 @@ export default function SettingsScreen({ navigation }) {
 
       {/* Password Modal */}
       <Modal visible={showPasswordModal} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setShowPasswordModal(false)}>
           <View style={s.modalContent} onStartShouldSetResponder={() => true}>
             <View style={s.modalHandle} />
@@ -495,6 +496,7 @@ export default function SettingsScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

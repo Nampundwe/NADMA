@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-
   ScrollView,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategories } from '../data/services';
 import {
@@ -272,7 +271,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#c5cae9',
+    color: colors.textMuted,
     textAlign: 'center',
   },
   form: {

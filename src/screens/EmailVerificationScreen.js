@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
@@ -61,7 +67,7 @@ export default function EmailVerificationScreen({ onVerified }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <View style={styles.content}>
         <View style={[styles.iconCircle, { backgroundColor: colors.primary + '20' }]}>
           <Ionicons name="mail-open-outline" size={64} color={colors.primary} />
@@ -107,7 +113,7 @@ export default function EmailVerificationScreen({ onVerified }) {
           <Text style={[styles.logoutText, { color: colors.textMuted }]}>Log Out</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

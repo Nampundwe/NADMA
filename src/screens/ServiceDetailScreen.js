@@ -7,16 +7,19 @@ import {
   Image,
   TouchableOpacity,
   Linking,
-  SafeAreaView,
   Alert,
   Share,
   Modal,
   TextInput,
   StatusBar,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { ServiceDetailSkeleton } from '../components/Skeleton';
 import * as ImagePicker from 'expo-image-picker';
+import { compressForProfile } from '../utils/imageCompression';
 import {
   toggleFavorite,
   isFavorite,
@@ -62,6 +65,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
   const [reportCategory, setReportCategory] = useState('Other');
   const [availability, setAvailability] = useState(null);
   const [pageLoading, setPageLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState(service.name || '');
   const [editDescription, setEditDescription] = useState(service.description || '');
@@ -128,6 +132,13 @@ export default function ServiceDetailScreen({ route, navigation }) {
       getProviderAvailability(service.id).then(setAvailability);
     }
   }, [service.id]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    const u = await getCurrentUser();
+    setUser(u);
+    setRefreshing(false);
+  };
 
   const isAdmin = user?.role === 'admin';
   const isProvider = user?.role === 'provider';
@@ -269,12 +280,12 @@ export default function ServiceDetailScreen({ route, navigation }) {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.7,
+      quality: 0.8,
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      const localUri = result.assets[0].uri;
       toast.info('Uploading photo...');
-      const url = await uploadImage(`provider-images/${service.id}.jpg`, localUri);
+      const compressedUri = await compressForProfile(result.assets[0].uri);
+      const url = await uploadImage(`provider-images/${service.id}.jpg`, compressedUri);
       if (url) {
         await updateServiceProvider(service.id, { image: url });
         service.image = url;
@@ -355,7 +366,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
             <Text style={styles.reviewUserName}>{item.userName}</Text>
             <View style={styles.reviewStars}>
               {[1, 2, 3, 4, 5].map((star) => (
-                <Ionicons key={star} name={star <= item.rating ? 'star' : 'star-outline'} size={13} color="#FFD700" />
+                <Ionicons key={star} name={star <= item.rating ? 'star' : 'star-outline'} size={13} color={colors.warning} />
               ))}
             </View>
           </View>
@@ -364,7 +375,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
           <Text style={styles.reviewDate}>{new Date(item.date).toLocaleDateString()}</Text>
           {isAdmin && (
             <TouchableOpacity onPress={() => handleDeleteReview(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={16} color="#F44336" />
+              <Ionicons name="trash-outline" size={16} color={colors.danger} />
             </TouchableOpacity>
           )}
         </View>
@@ -409,8 +420,8 @@ export default function ServiceDetailScreen({ route, navigation }) {
 
   if (pageLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <ServiceDetailSkeleton />
       </View>
     );
   }
@@ -418,8 +429,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colors.statusBar} backgroundColor={colors.headerBg} />
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Image */}
+      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}>
         <View style={styles.imageContainer}>
           <Image source={{ uri: service.image }} style={styles.image} />
           <View style={styles.imageOverlay} pointerEvents="none" />
@@ -427,7 +437,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.favBtn} onPress={handleFavorite} accessibilityLabel={fav ? "Remove from favorites" : "Add to favorites"} accessibilityRole="button" accessibilityState={{ selected: fav }}>
-            <Ionicons name={fav ? 'heart' : 'heart-outline'} size={24} color={fav ? '#F44336' : '#fff'} />
+            <Ionicons name={fav ? 'heart' : 'heart-outline'} size={24} color={fav ? colors.danger : '#fff'} />
           </TouchableOpacity>
         </View>
 
@@ -492,7 +502,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
             </Text>
             <View style={styles.metaRow}>
               <View style={styles.ratingBadge}>
-                <Ionicons name="star" size={14} color="#FFD700" />
+                <Ionicons name="star" size={14} color={colors.warning} />
                 <Text style={styles.rating}>{service.rating > 0 ? service.rating : 'New'}</Text>
               </View>
               {service.reviews > 0 && (
@@ -503,13 +513,13 @@ export default function ServiceDetailScreen({ route, navigation }) {
               </View>
               {service.verified && (
                 <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
+                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
                   <Text style={styles.verifiedText}>Verified</Text>
                 </View>
               )}
               {service.licensed && (
                 <View style={styles.licensedBadge}>
-                  <Ionicons name="ribbon" size={14} color="#2196F3" />
+                  <Ionicons name="ribbon" size={14} color={colors.info} />
                   <Text style={styles.licensedText}>Licensed</Text>
                 </View>
               )}
@@ -533,7 +543,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
             <View style={styles.servicesGrid}>
               {service.services.map((s, index) => (
                 <View key={index} style={styles.serviceChip}>
-                  <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
+                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
                   <Text style={styles.serviceText}>{s}</Text>
                 </View>
               ))}
@@ -589,14 +599,14 @@ export default function ServiceDetailScreen({ route, navigation }) {
               <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 14, elevation: 1 }}>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                   {availability.days.map((day) => (
-                    <View key={day} style={{ backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 }}>
-                      <Text style={{ fontSize: 12, color: '#4CAF50', fontWeight: '600' }}>{day}</Text>
+                    <View key={day} style={{ backgroundColor: colors.successLight, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 12, color: colors.success, fontWeight: '600' }}>{day}</Text>
                     </View>
                   ))}
                 </View>
                 {availability.startTime && availability.endTime && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Ionicons name="time" size={16} color={colors.textMuted} />
+                    <Ionicons name="schedule" size={16} color={colors.textMuted} />
                     <Text style={{ fontSize: 14, color: colors.textSecondary }}>{availability.startTime} - {availability.endTime}</Text>
                   </View>
                 )}
@@ -631,19 +641,19 @@ export default function ServiceDetailScreen({ route, navigation }) {
             <Text style={styles.sectionTitle}>Contact Information</Text>
             <View style={styles.contactCard}>
               <TouchableOpacity style={styles.contactRow} onPress={openPhone} activeOpacity={0.7} accessibilityLabel="Call provider" accessibilityRole="button">
-                <View style={[styles.contactIcon, { backgroundColor: '#E8F5E9' }]}>
-                  <Ionicons name="call" size={18} color="#4CAF50" />
+                <View style={[styles.contactIcon, { backgroundColor: colors.successLight }]}>
+                  <Ionicons name="phone" size={18} color={colors.success} />
                 </View>
                 <View style={styles.contactInfo}>
                   <Text style={styles.contactLabel}>Phone</Text>
                   <Text style={styles.contactValue}>{service.phone}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-right" size={18} color={colors.textMuted} />
               </TouchableOpacity>
 
               <View style={styles.contactRow}>
-                <View style={[styles.contactIcon, { backgroundColor: '#E3F2FD' }]}>
-                  <Ionicons name="location" size={18} color="#2196F3" />
+                <View style={[styles.contactIcon, { backgroundColor: colors.infoLight }]}>
+                  <Ionicons name="location-on" size={18} color={colors.info} />
                 </View>
                 <View style={styles.contactInfo}>
                   <Text style={styles.contactLabel}>Address</Text>
@@ -652,8 +662,8 @@ export default function ServiceDetailScreen({ route, navigation }) {
               </View>
 
               <View style={[styles.contactRow, { borderBottomWidth: 0 }]}>
-                <View style={[styles.contactIcon, { backgroundColor: '#FFF3E0' }]}>
-                  <Ionicons name="time" size={18} color="#FF9800" />
+                <View style={[styles.contactIcon, { backgroundColor: colors.warningLight }]}>
+                  <Ionicons name="schedule" size={18} color={colors.warning} />
                 </View>
                 <View style={styles.contactInfo}>
                   <Text style={styles.contactLabel}>Hours</Text>
@@ -665,31 +675,31 @@ export default function ServiceDetailScreen({ route, navigation }) {
 
           {/* Action Buttons */}
           <View style={styles.actionsGrid}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E8F5E9' }]} onPress={openPhone} activeOpacity={0.7} accessibilityLabel="Call provider" accessibilityRole="button">
-              <Ionicons name="call" size={24} color="#4CAF50" />
-              <Text style={[styles.actionLabel, { color: '#4CAF50' }]}>Call Now</Text>
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: colors.successLight }]} onPress={openPhone} activeOpacity={0.7} accessibilityLabel="Call provider" accessibilityRole="button">
+              <Ionicons name="phone" size={24} color={colors.success} />
+              <Text style={[styles.actionLabel, { color: colors.success }]}>Call Now</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: '#E3F2FD' }]}
+              style={[styles.actionCard, { backgroundColor: colors.infoLight }]}
               activeOpacity={0.7}
-              onPress={() => navigation.navigate('Chat', { businessId: service.id, businessName: service.name })}
+              onPress={() => navigation.navigate('Chat', { businessId: service.id, businessName: service.name, receiverId: service.ownerId, receiverName: service.name, conversationType: 'business' })}
               accessibilityLabel="Message provider"
               accessibilityRole="button"
             >
-              <Ionicons name="chatbubbles" size={24} color="#2196F3" />
-              <Text style={[styles.actionLabel, { color: '#2196F3' }]}>Message</Text>
+              <Ionicons name="chatbubbles" size={24} color={colors.info} />
+              <Text style={[styles.actionLabel, { color: colors.info }]}>Message</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: '#F3E5F5' }]}
+              style={[styles.actionCard, { backgroundColor: colors.purpleLight }]}
               activeOpacity={0.7}
               onPress={() => setShowReviewModal(true)}
               accessibilityLabel="Write a review"
               accessibilityRole="button"
             >
-              <Ionicons name="star" size={24} color="#9C27B0" />
-              <Text style={[styles.actionLabel, { color: '#9C27B0' }]}>Review</Text>
+              <Ionicons name="star" size={24} color={colors.purple} />
+              <Text style={[styles.actionLabel, { color: colors.purple }]}>Review</Text>
             </TouchableOpacity>
           </View>
 
@@ -703,7 +713,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
           >
             <Ionicons name="calendar" size={22} color="#fff" />
             <Text style={styles.bookButtonText}>Book This Provider</Text>
-            <Ionicons name="arrow-forward" size={20} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="arrow-forward-outline" size={20} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
 
           {/* Share */}
@@ -714,7 +724,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
             accessibilityLabel="Share provider"
             accessibilityRole="button"
           >
-            <Ionicons name="share-outline" size={20} color={colors.primary} />
+            <Ionicons name="share" size={20} color={colors.primary} />
             <Text style={styles.shareButtonText}>Share Provider</Text>
           </TouchableOpacity>
 
@@ -727,7 +737,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
               accessibilityLabel="Report provider"
               accessibilityRole="button"
             >
-              <Ionicons name="flag-outline" size={18} color="#FF9800" />
+              <Ionicons name="flag" size={18} color={colors.warning} />
               <Text style={styles.reportButtonText}>Report Provider</Text>
             </TouchableOpacity>
           )}
@@ -741,7 +751,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
               accessibilityLabel="Edit business"
               accessibilityRole="button"
             >
-              <Ionicons name="create" size={18} color="#fff" />
+              <Ionicons name="pencil" size={18} color="#fff" />
               <Text style={styles.providerEditText}>Edit Business</Text>
             </TouchableOpacity>
           )}
@@ -755,24 +765,39 @@ export default function ServiceDetailScreen({ route, navigation }) {
               accessibilityLabel="Delete business"
               accessibilityRole="button"
             >
-              <Ionicons name="trash" size={18} color="#F44336" />
+              <Ionicons name="trash" size={18} color={colors.danger} />
               <Text style={styles.adminDeleteText}>Delete Business</Text>
             </TouchableOpacity>
           )}
 
           {/* Reviews */}
-          {reviews.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.reviewsSectionHeader}>
-                <Text style={styles.sectionTitle}>Reviews ({reviews.length})</Text>
-              </View>
-              {reviews.map((review) => (
+          <View style={styles.section}>
+            <View style={styles.reviewsSectionHeader}>
+              <Text style={styles.sectionTitle}>Reviews {reviews.length > 0 ? `(${reviews.length})` : ''}</Text>
+            </View>
+            {reviews.length > 0 ? (
+              reviews.map((review) => (
                 <View key={review.id}>
                   {renderReview({ item: review })}
                 </View>
-              ))}
-            </View>
-          )}
+              ))
+            ) : (
+              <View style={styles.emptyReviewsContainer}>
+                <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.textMuted} />
+                <Text style={styles.emptyReviewsTitle}>No reviews yet</Text>
+                <Text style={styles.emptyReviewsText}>Be the first to review this provider</Text>
+                <TouchableOpacity
+                  style={[styles.writeReviewButton, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowReviewModal(true)}
+                  accessibilityLabel="Write a review"
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="pencil" size={16} color="#fff" />
+                  <Text style={styles.writeReviewButtonText}>Write a Review</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
       </ScrollView>
 
@@ -784,22 +809,22 @@ export default function ServiceDetailScreen({ route, navigation }) {
             <Text style={styles.modalTitle}>Share via</Text>
 
             <TouchableOpacity style={styles.shareOption} onPress={shareViaWhatsApp} accessibilityLabel="Share via WhatsApp" accessibilityRole="button">
-              <View style={[styles.shareIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="logo-whatsapp" size={24} color="#25D366" />
+              <View style={[styles.shareIcon, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="chat" size={24} color={colors.success} />
               </View>
               <Text style={styles.shareOptionText}>WhatsApp</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.shareOption} onPress={shareViaSMS} accessibilityLabel="Share via SMS" accessibilityRole="button">
-              <View style={[styles.shareIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="chatbubble" size={24} color="#2196F3" />
+              <View style={[styles.shareIcon, { backgroundColor: colors.infoLight }]}>
+                <Ionicons name="chat" size={24} color={colors.info} />
               </View>
               <Text style={styles.shareOptionText}>SMS</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.shareOption} onPress={shareGeneric} accessibilityLabel="Share via more options" accessibilityRole="button">
-              <View style={[styles.shareIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="share-social" size={24} color="#FF9800" />
+              <View style={[styles.shareIcon, { backgroundColor: colors.warningLight }]}>
+                <Ionicons name="share" size={24} color={colors.warning} />
               </View>
               <Text style={styles.shareOptionText}>More Options</Text>
             </TouchableOpacity>
@@ -818,7 +843,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
             <View style={styles.ratingPicker}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity key={star} onPress={() => setReviewRating(star)} accessibilityLabel={`Rate ${star} star${star > 1 ? 's' : ''}`} accessibilityRole="button" accessibilityState={{ selected: star <= reviewRating }}>
-                  <Ionicons name={star <= reviewRating ? 'star' : 'star-outline'} size={36} color="#FFD700" />
+                  <Ionicons name={star <= reviewRating ? 'star' : 'star-outline'} size={36} color={colors.warning} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -897,7 +922,7 @@ export default function ServiceDetailScreen({ route, navigation }) {
               <TouchableOpacity style={styles.cancelReviewButton} onPress={() => setShowReportModal(false)} accessibilityLabel="Cancel report" accessibilityRole="button">
                 <Text style={styles.cancelReviewText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.submitReviewButton, { backgroundColor: '#FF9800' }]} onPress={handleReport} accessibilityLabel="Submit report" accessibilityRole="button">
+              <TouchableOpacity style={[styles.submitReviewButton, { backgroundColor: colors.warning }]} onPress={handleReport} accessibilityLabel="Submit report" accessibilityRole="button">
                 <Text style={styles.submitReviewText}>Submit Report</Text>
               </TouchableOpacity>
             </View>
@@ -914,31 +939,31 @@ export default function ServiceDetailScreen({ route, navigation }) {
 
             <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Business Name</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Business Name</Text>
                 <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editName} onChangeText={setEditName} maxLength={50} />
               </View>
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Description</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Description</Text>
                 <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg, minHeight: 80 }} value={editDescription} onChangeText={setEditDescription} multiline maxLength={300} />
               </View>
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Phone</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Phone</Text>
                 <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" maxLength={20} />
               </View>
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Address</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Address</Text>
                 <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editAddress} onChangeText={setEditAddress} maxLength={100} />
               </View>
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Hours</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Hours</Text>
                 <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editHours} onChangeText={setEditHours} maxLength={50} />
               </View>
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Services (comma separated)</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Services (comma separated)</Text>
                 <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editServices} onChangeText={setEditServices} maxLength={200} />
               </View>
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>Skills (comma separated)</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Skills (comma separated)</Text>
                 <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg }} value={editSkills} onChangeText={setEditSkills} maxLength={300} />
               </View>
             </ScrollView>
@@ -1167,7 +1192,7 @@ const getStyles = (colors) => createStyleSheet({
   ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.warningLight,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1176,7 +1201,7 @@ const getStyles = (colors) => createStyleSheet({
   rating: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#F57F17',
+    color: colors.warning,
   },
   reviewCount: {
     fontSize: 13,
@@ -1287,7 +1312,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   // Buttons
   bookButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1295,7 +1320,7 @@ const getStyles = (colors) => createStyleSheet({
     borderRadius: 14,
     marginBottom: 10,
     gap: 10,
-    shadowColor: '#4CAF50',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1328,7 +1353,7 @@ const getStyles = (colors) => createStyleSheet({
     justifyContent: 'center',
     padding: 14,
     borderRadius: 14,
-    backgroundColor: '#1B5E20',
+    backgroundColor: colors.success,
     marginBottom: 10,
     gap: 8,
   },
@@ -1344,20 +1369,51 @@ const getStyles = (colors) => createStyleSheet({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#FEE2E2',
+    borderColor: colors.dangerLight,
     marginBottom: 10,
     gap: 8,
   },
   adminDeleteText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#F44336',
+    color: colors.danger,
   },
   // Reviews
   reviewsSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  emptyReviewsContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
+  emptyReviewsTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  emptyReviewsText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  writeReviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  writeReviewButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   reviewCard: {
     backgroundColor: colors.card,
@@ -1562,7 +1618,7 @@ const getStyles = (colors) => createStyleSheet({
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.successLight,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1571,12 +1627,12 @@ const getStyles = (colors) => createStyleSheet({
   verifiedText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: colors.success,
   },
   licensedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E3F2FD',
+    backgroundColor: colors.infoLight,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1585,7 +1641,7 @@ const getStyles = (colors) => createStyleSheet({
   licensedText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#2196F3',
+    color: colors.info,
   },
   reportButton: {
     flexDirection: 'row',
@@ -1594,15 +1650,15 @@ const getStyles = (colors) => createStyleSheet({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#FFF3E0',
+    borderColor: colors.warningLight,
     marginBottom: 10,
     gap: 8,
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.warningLight,
   },
   reportButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#FF9800',
+    color: colors.warning,
   },
   reportChip: {
     paddingHorizontal: 14,
@@ -1611,7 +1667,7 @@ const getStyles = (colors) => createStyleSheet({
     backgroundColor: colors.borderLight,
   },
   reportChipActive: {
-    backgroundColor: '#FF9800',
+    backgroundColor: colors.warning,
   },
   reportChipText: {
     fontSize: 13,

@@ -1,6 +1,7 @@
 node_modules/
 .expo/
 dist/
+dist-check/
 *.jks
 *.p8
 *.p12
@@ -10,3 +11,5 @@ dist/
 web-build/
 .env
 google-services.json
+*.hbc
+*.map

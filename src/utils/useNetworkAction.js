@@ -3,7 +3,7 @@ import { useConnectivity } from '../context/ConnectivityContext';
 import { useToast } from '../context/ToastContext';
 import { hapticWarning } from './haptics';
 
-const ACTION_TIMEOUT = 15000;
+const ACTION_TIMEOUT = 30000;
 
 export function useNetworkAction() {
   const [loading, setLoading] = useState(false);

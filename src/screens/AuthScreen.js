@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -13,9 +12,9 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { signup, login, setCurrentUser, resetPassword } from '../data/firebaseStorage';
-import { getCategories } from '../data/services';
 import { AuthContext } from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
@@ -44,11 +43,6 @@ export default function AuthScreen({ navigation }) {
   const [businessCategory, setBusinessCategory] = useState('');
   const [businessPhone, setBusinessPhone] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
-  const [categories, setCategories] = useState([]);
-
-  useEffect(() => {
-    getCategories().then(setCategories).catch(() => {});
-  }, []);
 
   const handleAuth = async () => {
     if (loading) return;
@@ -103,8 +97,16 @@ export default function AuthScreen({ navigation }) {
             const { applyReferralCode } = require('../data/firebaseStorage');
             await applyReferralCode(referralCode.trim(), result.user?.id || email.trim());
           }
-          toast.success('Account created successfully!');
-          setTimeout(() => onLogin(), 800);
+          toast.success('Account created!');
+          setTimeout(() => {
+            navigation.reset({
+              index: 0,
+              routes: [{
+                name: 'OnboardingProfile',
+                params: { userId: result.user?.id, isProvider },
+              }],
+            });
+          }, 600);
         } else {
           toast.error(result.error);
         }
@@ -161,7 +163,7 @@ export default function AuthScreen({ navigation }) {
     },
     headerSubtitle: {
       fontSize: 16,
-      color: '#C5CAE9',
+      color: colors.textMuted,
     },
     formCard: {
       flex: 1,
@@ -191,7 +193,7 @@ export default function AuthScreen({ navigation }) {
     label: {
       fontSize: 13,
       fontWeight: '600',
-      color: '#374151',
+      color: colors.textSecondary,
       marginBottom: 8,
     },
     inputContainer: {
@@ -221,7 +223,7 @@ export default function AuthScreen({ navigation }) {
       gap: 8,
     },
     authButtonDisabled: {
-      backgroundColor: '#7986CB',
+      backgroundColor: colors.textMuted,
     },
     authButtonText: {
       color: '#fff',
@@ -316,7 +318,7 @@ export default function AuthScreen({ navigation }) {
                   <TextInput
                     style={styles.input}
                     placeholder="John Mwanza"
-                    placeholderTextColor="#C4C4C4"
+                    placeholderTextColor={colors.textMuted}
                     value={name}
                     onChangeText={setName}
                     maxLength={50}
@@ -333,7 +335,7 @@ export default function AuthScreen({ navigation }) {
                 <TextInput
                   style={styles.input}
                   placeholder="you@example.com"
-                  placeholderTextColor="#C4C4C4"
+                  placeholderTextColor={colors.textMuted}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -351,7 +353,7 @@ export default function AuthScreen({ navigation }) {
                 <TextInput
                   style={styles.input}
                   placeholder="Enter password"
-                  placeholderTextColor="#C4C4C4"
+                  placeholderTextColor={colors.textMuted}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -381,7 +383,7 @@ export default function AuthScreen({ navigation }) {
                   <TextInput
                     style={styles.input}
                     placeholder="Confirm password"
-                    placeholderTextColor="#C4C4C4"
+                    placeholderTextColor={colors.textMuted}
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                     secureTextEntry={!showConfirmPassword}
@@ -413,13 +415,13 @@ export default function AuthScreen({ navigation }) {
                   backgroundColor: isProvider ? colors.primary : 'transparent',
                   justifyContent: 'center', alignItems: 'center',
                 }}>
-                  {isProvider && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  {isProvider && <Ionicons name="check" size={14} color="#fff" />}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>Register as a Service Provider</Text>
                   <Text style={{ fontSize: 12, color: colors.textSecondary }}>Manage your business listing and bookings</Text>
                 </View>
-                <Ionicons name="business-outline" size={22} color={isProvider ? colors.primary : colors.textMuted} />
+                <Ionicons name="business" size={22} color={isProvider ? colors.primary : colors.textMuted} />
               </TouchableOpacity>
             )}
 
@@ -428,11 +430,11 @@ export default function AuthScreen({ navigation }) {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Business Name</Text>
                   <View style={styles.inputContainer}>
-                    <Ionicons name="business-outline" size={20} color={colors.textMuted} />
+                    <Ionicons name="business" size={20} color={colors.textMuted} />
                     <TextInput
                       style={styles.input}
                       placeholder="Your business name"
-                      placeholderTextColor="#C4C4C4"
+                      placeholderTextColor={colors.textMuted}
                       value={businessName}
                       onChangeText={setBusinessName}
                       maxLength={50}
@@ -442,27 +444,27 @@ export default function AuthScreen({ navigation }) {
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Category</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
-                    {categories.map((cat) => (
-                      <TouchableOpacity
-                        key={cat.name}
-                        style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: businessCategory === cat.name ? colors.primary : colors.inputBg, borderWidth: 1, borderColor: businessCategory === cat.name ? colors.primary : colors.border }}
-                        onPress={() => setBusinessCategory(cat.name)}
-                      >
-                        <Text style={{ fontSize: 13, color: businessCategory === cat.name ? '#fff' : colors.text, fontWeight: '500' }}>{cat.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="pricetag-outline" size={20} color={colors.textMuted} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. Plumbing, Electrical, Cleaning"
+                      placeholderTextColor={colors.textMuted}
+                      value={businessCategory}
+                      onChangeText={setBusinessCategory}
+                      maxLength={50}
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Business Phone</Text>
                   <View style={styles.inputContainer}>
-                    <Ionicons name="call-outline" size={20} color={colors.textMuted} />
+                    <Ionicons name="phone" size={20} color={colors.textMuted} />
                     <TextInput
                       style={styles.input}
                       placeholder="Business phone number"
-                      placeholderTextColor="#C4C4C4"
+                      placeholderTextColor={colors.textMuted}
                       value={businessPhone}
                       onChangeText={setBusinessPhone}
                       keyboardType="phone-pad"
@@ -474,11 +476,11 @@ export default function AuthScreen({ navigation }) {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Address</Text>
                   <View style={styles.inputContainer}>
-                    <Ionicons name="location-outline" size={20} color={colors.textMuted} />
+                    <Ionicons name="location-on" size={20} color={colors.textMuted} />
                     <TextInput
                       style={styles.input}
                       placeholder="Business address"
-                      placeholderTextColor="#C4C4C4"
+                      placeholderTextColor={colors.textMuted}
                       value={businessAddress}
                       onChangeText={setBusinessAddress}
                       maxLength={100}
@@ -492,11 +494,11 @@ export default function AuthScreen({ navigation }) {
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Referral Code (Optional)</Text>
                 <View style={styles.inputContainer}>
-                  <Ionicons name="gift-outline" size={20} color={colors.textMuted} />
+                  <Ionicons name="gift" size={20} color={colors.textMuted} />
                   <TextInput
                     style={styles.input}
                     placeholder="Enter referral code"
-                    placeholderTextColor="#C4C4C4"
+                    placeholderTextColor={colors.textMuted}
                     value={referralCode}
                     onChangeText={setReferralCode}
                     autoCapitalize="characters"
@@ -518,7 +520,7 @@ export default function AuthScreen({ navigation }) {
                   backgroundColor: agreedToTerms ? colors.primary : 'transparent',
                   justifyContent: 'center', alignItems: 'center',
                 }}>
-                  {agreedToTerms && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  {agreedToTerms && <Ionicons name="check" size={14} color="#fff" />}
                 </View>
                 <Text style={{ fontSize: 13, color: colors.textSecondary, flex: 1 }}>
                   I agree to the{' '}
@@ -545,7 +547,7 @@ export default function AuthScreen({ navigation }) {
                   <Text style={styles.authButtonText}>
                     {isLogin ? 'Sign In' : 'Create Account'}
                   </Text>
-                  <Ionicons name="arrow-forward" size={20} color="#fff" />
+                  <Ionicons name="arrow-forward-outline" size={20} color="#fff" />
                 </>
               )}
             </TouchableOpacity>

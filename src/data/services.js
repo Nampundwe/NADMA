@@ -1,4 +1,4 @@
-import { getAllCategories } from './storage';
+import { getAllCategories } from './firebaseStorage';
 
 let _cachedCategories = null;
 

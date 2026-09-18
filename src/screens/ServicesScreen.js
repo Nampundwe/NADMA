@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   Image,
   StatusBar,
@@ -14,7 +13,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AnimatedCard from '../components/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -31,6 +32,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { hapticLight, hapticMedium, hapticWarning } from '../utils/haptics';
 import { ServicesSkeleton } from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 import { createStyleSheet } from '../utils/responsive';
 
 const DEFAULT_IMAGES = {
@@ -65,6 +67,7 @@ export default function ServicesScreen({ route, navigation }) {
   const [newImage, setNewImage] = useState(null);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const category = categories.find((c) => c.name === categoryName);
   const isAdmin = user?.role === 'admin';
@@ -126,7 +129,7 @@ export default function ServicesScreen({ route, navigation }) {
     adminAddBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#4CAF50',
+      backgroundColor: colors.primary,
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 20,
@@ -298,14 +301,14 @@ export default function ServicesScreen({ route, navigation }) {
       gap: 4,
     },
     serviceChip: {
-      backgroundColor: '#E8F5E9',
+      backgroundColor: colors.successLight,
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 10,
     },
     serviceChipText: {
       fontSize: 11,
-      color: '#4CAF50',
+      color: colors.success,
       fontWeight: '500',
     },
     providerActions: {
@@ -331,7 +334,7 @@ export default function ServicesScreen({ route, navigation }) {
       width: 34,
       height: 34,
       borderRadius: 17,
-      backgroundColor: '#FEE2E2',
+      backgroundColor: colors.dangerLight,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -470,7 +473,7 @@ export default function ServicesScreen({ route, navigation }) {
     },
     removeImageText: {
       fontSize: 13,
-      color: '#F44336',
+      color: colors.danger,
     },
   });
 
@@ -490,6 +493,13 @@ export default function ServicesScreen({ route, navigation }) {
     })();
     return () => unsubscribe();
   }, [categoryName]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    const currentUser = await getCurrentUser();
+    setUser(currentUser);
+    setRefreshing(false);
+  };
 
   const filteredProviders = useMemo(() => {
     let filtered = [...providers];
@@ -632,10 +642,10 @@ export default function ServicesScreen({ route, navigation }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
           <Text style={styles.providerName}>{item.name}</Text>
           {item.verified && (
-            <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
+            <Ionicons name="checkmark-circle" size={14} color={colors.success} />
           )}
           {item.licensed && (
-            <Ionicons name="ribbon" size={14} color="#2196F3" />
+            <Ionicons name="ribbon" size={14} color={colors.info} />
           )}
         </View>
         <Text style={styles.providerDescription} numberOfLines={2}>
@@ -643,7 +653,7 @@ export default function ServicesScreen({ route, navigation }) {
         </Text>
         <View style={styles.providerMeta}>
           <View style={styles.ratingContainer}>
-            <Ionicons name="star" size={16} color="#FFD700" />
+            <Ionicons name="star" size={16} color={colors.warning} />
             <Text style={styles.ratingText}>
               {item.rating > 0 ? item.rating : 'New'}
             </Text>
@@ -652,7 +662,7 @@ export default function ServicesScreen({ route, navigation }) {
             )}
           </View>
           <View style={styles.hoursContainer}>
-            <Ionicons name="time" size={14} color="#666" />
+            <Ionicons name="schedule" size={14} color="#666" />
             <Text style={styles.hoursText}>{item.hours}</Text>
           </View>
         </View>
@@ -689,7 +699,7 @@ export default function ServicesScreen({ route, navigation }) {
             accessibilityLabel={`Delete ${item.name}`}
             accessibilityRole="button"
           >
-            <Ionicons name="trash" size={16} color="#F44336" />
+            <Ionicons name="trash" size={16} color={colors.danger} />
           </TouchableOpacity>
         )}
       </View>
@@ -746,7 +756,7 @@ export default function ServicesScreen({ route, navigation }) {
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
+        <Ionicons name="search-outline" size={18} color={colors.textMuted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder={`Search ${categoryName} deliverers...`}
@@ -768,7 +778,7 @@ export default function ServicesScreen({ route, navigation }) {
         {[
           { key: 'rating', label: 'Rating', icon: 'star' },
           { key: 'name', label: 'Name', icon: 'text' },
-          { key: 'reviews', label: 'Reviews', icon: 'chatbubble' },
+          { key: 'reviews', label: 'Reviews', icon: 'chat' },
         ].map((option) => (
           <TouchableOpacity
             key={option.key}
@@ -795,6 +805,7 @@ export default function ServicesScreen({ route, navigation }) {
         renderItem={renderProvider}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         ListHeaderComponent={
           filteredProviders.length > 0 ? (
             <Text style={styles.resultText}>
@@ -804,42 +815,19 @@ export default function ServicesScreen({ route, navigation }) {
         }
         ListEmptyComponent={
           providers.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconCircle}>
-                <Ionicons name="people-outline" size={40} color="#C4C4C4" />
-              </View>
-              <Text style={styles.emptyText}>No providers yet</Text>
-              <Text style={styles.emptySubtext}>
-                No {categoryName.toLowerCase()} providers have been added.{'\n'}
-                {isAdmin
-                  ? 'Tap the "Add" button above to add a provider.'
-                  : 'Check back soon or contact admin.'}
-              </Text>
-              {isAdmin && (
-                <TouchableOpacity
-                  style={styles.emptyAddBtn}
-                  onPress={() => {
-                    resetAddForm();
-                    setShowAddModal(true);
-                  }}
-                  accessibilityLabel="Add provider"
-                  accessibilityRole="button"
-                >
-                  <Ionicons name="add-circle" size={20} color="#fff" />
-                  <Text style={styles.emptyAddBtnText}>Add Provider</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <EmptyState
+              icon="people-outline"
+              title="No providers yet"
+              subtitle={`No ${categoryName.toLowerCase()} providers have been added. ${isAdmin ? 'Tap the "Add" button above to add a provider.' : 'Check back soon or contact admin.'}`}
+              buttonText={isAdmin ? 'Add Provider' : undefined}
+              onPress={isAdmin ? () => { resetAddForm(); setShowAddModal(true); } : undefined}
+            />
           ) : (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconCircle}>
-                <Ionicons name="search" size={40} color="#C4C4C4" />
-              </View>
-              <Text style={styles.emptyText}>No providers found</Text>
-              <Text style={styles.emptySubtext}>
-                Try a different search or check back later
-              </Text>
-            </View>
+            <EmptyState
+              icon="search-outline"
+              title="No providers found"
+              subtitle="Try a different search or check back later"
+            />
           )
         }
       />
@@ -847,7 +835,7 @@ export default function ServicesScreen({ route, navigation }) {
       {/* Admin Add Provider Modal */}
       <Modal visible={showAddModal} animationType="slide" transparent>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.modalContent}>
@@ -884,7 +872,7 @@ export default function ServicesScreen({ route, navigation }) {
                   numberOfLines={3}
                   textAlignVertical="top"
                   maxLength={500}
-                  accessibilityLabel="Description"
+                  accessibilityLabel="document-text"
                 />
               </View>
 
@@ -902,7 +890,7 @@ export default function ServicesScreen({ route, navigation }) {
                 </TouchableOpacity>
                 {newImage && (
                   <TouchableOpacity style={styles.removeImageBtn} onPress={() => setNewImage(null)} accessibilityLabel="Remove photo" accessibilityRole="button">
-                    <Ionicons name="close-circle" size={18} color="#F44336" />
+                    <Ionicons name="close-circle" size={18} color={colors.danger} />
                     <Text style={styles.removeImageText}>Remove photo</Text>
                   </TouchableOpacity>
                 )}

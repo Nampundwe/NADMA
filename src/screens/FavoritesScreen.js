@@ -2,10 +2,8 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   RefreshControl,
   Image,
   Alert,
@@ -15,6 +13,7 @@ import {
   UIManager,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AnimatedCard from '../components/AnimatedCard';
 
 if (Platform.OS === 'android') {
@@ -82,7 +81,7 @@ export default function FavoritesScreen({ navigation }) {
         <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.cardCategory}>{item.category}</Text>
         <View style={styles.ratingRow}>
-          <Ionicons name="star" size={14} color="#FFD700" />
+          <Ionicons name="star" size={14} color={colors.warning} />
           <Text style={styles.ratingText}>{item.rating || 'New'}</Text>
           {item.reviews > 0 && (
             <Text style={styles.reviewCount}>({item.reviews})</Text>
@@ -94,7 +93,7 @@ export default function FavoritesScreen({ navigation }) {
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         onPress={() => { hapticWarning(); removeFav(item); }}
       >
-        <Ionicons name="heart" size={22} color="#F44336" />
+        <Ionicons name="heart" size={22} color={colors.danger} />
       </TouchableOpacity>
     </AnimatedCard>
   );
@@ -132,7 +131,7 @@ export default function FavoritesScreen({ navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
-              <Ionicons name="heart-outline" size={40} color="#C4C4C4" />
+              <Ionicons name="heart-outline" size={40} color={colors.textMuted} />
             </View>
             <Text style={styles.emptyText}>No favorites yet</Text>
             <Text style={styles.emptySubtext}>
@@ -168,7 +167,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#C5CAE9',
+    color: colors.textMuted,
     marginTop: 2,
   },
   list: {

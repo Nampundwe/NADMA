@@ -2,13 +2,12 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -99,7 +98,7 @@ export default function ProviderDashboardScreen({ route, navigation }) {
           key={i}
           name={i <= rating ? 'star' : 'star-outline'}
           size={14}
-          color={i <= rating ? '#F59E0B' : colors.textMuted}
+          color={i <= rating ? colors.warning : colors.textMuted}
         />
       );
     }
@@ -143,32 +142,32 @@ export default function ProviderDashboardScreen({ route, navigation }) {
       >
         {stats && (
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: '#EDE9FE' }]}>
-              <View style={[styles.statIconWrap, { backgroundColor: '#7C3AED' }]}>
+            <View style={[styles.statCard, { backgroundColor: colors.purpleLight }]}>
+              <View style={[styles.statIconWrap, { backgroundColor: colors.purple }]}>
                 <Ionicons name="calendar" size={20} color="#fff" />
               </View>
               <Text style={styles.statValue}>{stats.totalBookings}</Text>
               <Text style={styles.statLabel}>Total</Text>
             </View>
 
-            <View style={[styles.statCard, { backgroundColor: '#D1FAE5' }]}>
-              <View style={[styles.statIconWrap, { backgroundColor: '#059669' }]}>
+            <View style={[styles.statCard, { backgroundColor: colors.successLight }]}>
+              <View style={[styles.statIconWrap, { backgroundColor: colors.success }]}>
                 <Ionicons name="checkmark-circle" size={20} color="#fff" />
               </View>
               <Text style={styles.statValue}>{stats.completedBookings}</Text>
               <Text style={styles.statLabel}>Completed</Text>
             </View>
 
-            <View style={[styles.statCard, { backgroundColor: '#FEF3C7' }]}>
-              <View style={[styles.statIconWrap, { backgroundColor: '#D97706' }]}>
+            <View style={[styles.statCard, { backgroundColor: colors.warningLight }]}>
+              <View style={[styles.statIconWrap, { backgroundColor: colors.warning }]}>
                 <Ionicons name="hourglass" size={20} color="#fff" />
               </View>
               <Text style={styles.statValue}>{stats.pendingBookings}</Text>
               <Text style={styles.statLabel}>Pending</Text>
             </View>
 
-            <View style={[styles.statCard, { backgroundColor: '#DBEAFE' }]}>
-              <View style={[styles.statIconWrap, { backgroundColor: '#2563EB' }]}>
+            <View style={[styles.statCard, { backgroundColor: colors.infoLight }]}>
+              <View style={[styles.statIconWrap, { backgroundColor: colors.info }]}>
                 <Ionicons name="star" size={20} color="#fff" />
               </View>
               <Text style={styles.statValue}>{stats.avgRating || '—'}</Text>
@@ -185,7 +184,7 @@ export default function ProviderDashboardScreen({ route, navigation }) {
 
           {bookings.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={40} color={colors.textMuted} />
+              <Ionicons name="calendar" size={40} color={colors.textMuted} />
               <Text style={styles.emptyText}>No bookings yet</Text>
             </View>
           ) : (
@@ -245,7 +244,7 @@ export default function ProviderDashboardScreen({ route, navigation }) {
                 <View style={styles.reviewTop}>
                   <View style={styles.reviewAvatar}>
                     <Text style={styles.reviewAvatarText}>
-                      {review.userName ? review.userName.charAt(0).toUpperCase() : '?'}
+                      {review.userName ? review.userName.charAt(0).toUpperCase() : ''}
                     </Text>
                   </View>
                   <View style={styles.reviewUserWrap}>

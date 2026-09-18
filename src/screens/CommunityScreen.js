@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   FlatList,
-  SafeAreaView,
   TextInput,
   Modal,
   Alert,
@@ -20,29 +19,40 @@ import {
   Image,
   Share,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { compressForPost } from '../utils/imageCompression';
 import {
   addCommunityPost,
   deleteCommunityPost,
   togglePostLike,
+  togglePostReaction,
   addPostComment,
+  deleteComment,
+  toggleCommentLike,
+  savePost,
+  unsavePost,
   getCurrentUser,
   onPostsSnapshot,
-  onPostCommentsSnapshot,
   uploadCommunityImage,
   toggleFollow,
   onUserFollowsSnapshot,
+  addReport,
+  REACTIONS,
+  REACTION_LABELS,
 } from '../data/firebaseStorage';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticWarning } from '../utils/haptics';
 import { useNetworkAction } from '../utils/useNetworkAction';
 import { CommunitySkeleton } from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
+import SwipeablePostCard from '../components/SwipeablePostCard';
 import { createStyleSheet } from '../utils/responsive';
 
 const POST_CATEGORIES = [
@@ -93,7 +103,7 @@ function getAvatarColor(name) {
 const sanitize = (text) => text.replace(/<[^>]*>/g, '').trim();
 
 function getInitials(name) {
-  if (!name) return '?';
+  if (!name) return '';
   const parts = name.trim().split(' ');
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
@@ -142,6 +152,13 @@ export default function CommunityScreen({ navigation }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [followingIds, setFollowingIds] = useState(new Set());
+  const [failedImages, setFailedImages] = useState(new Set());
+  const [reactionPickerPost, setReactionPickerPost] = useState(null);
+  const [savedPostIds, setSavedPostIds] = useState(new Set());
+  const [postOptionsMenu, setPostOptionsMenu] = useState(null);
+  const [reportModalPost, setReportModalPost] = useState(null);
+  const [reportCategory, setReportCategory] = useState('Other');
+  const [reportReason, setReportReason] = useState('');
   const emptyOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -160,11 +177,12 @@ export default function CommunityScreen({ navigation }) {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.7,
+      quality: 0.8,
       allowsEditing: true,
     });
     if (!result.canceled && result.assets?.[0]) {
-      setSelectedImage(result.assets[0].uri);
+      const compressedUri = await compressForPost(result.assets[0].uri);
+      setSelectedImage(compressedUri);
     }
   };
 
@@ -214,12 +232,16 @@ export default function CommunityScreen({ navigation }) {
     let imageUrl = null;
     if (selectedImage) {
       imageUrl = await uploadCommunityImage(postId, selectedImage);
+      if (!imageUrl) {
+        toast.error('Photo upload failed — posting without the photo');
+      }
     }
     const post = {
       id: postId,
       userId: user.id,
       userName: user.name,
       userHeadline: user.headline || '',
+      userProfileImage: user.profileImage || null,
       userRole: user.role,
       title: newTitle.trim() || newDescription.trim().substring(0, 60),
       description: sanitize(newDescription),
@@ -271,6 +293,50 @@ export default function CommunityScreen({ navigation }) {
     await togglePostLike(postId, user.id, user.name);
   });
 
+  const handleReaction = (postId, reaction) => run(async () => {
+    if (!user) {
+      toast.error('Please log in');
+      return;
+    }
+    hapticLight();
+    await togglePostReaction(postId, user.id, user.name, reaction);
+    setReactionPickerPost(null);
+  });
+
+  const handleSavePost = (postId) => run(async () => {
+    if (!user) return;
+    hapticLight();
+    if (savedPostIds.has(postId)) {
+      await unsavePost(user.id, postId);
+      setSavedPostIds((prev) => { const s = new Set(prev); s.delete(postId); return s; });
+      toast.success('Removed from saved');
+    } else {
+      await savePost(user.id, postId);
+      setSavedPostIds((prev) => new Set(prev).add(postId));
+      toast.success('Saved');
+    }
+  });
+
+  const handleDeleteCommentItem = (postId, commentId) => {
+    Alert.alert('Delete Comment', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteComment(postId, commentId);
+          hapticSuccess();
+        },
+      },
+    ]);
+  };
+
+  const handleCommentLike = (postId, commentId) => run(async () => {
+    if (!user) return;
+    hapticLight();
+    await toggleCommentLike(postId, commentId, user.id);
+  });
+
   const handleFollow = (targetId) => run(async () => {
     if (!user) {
       toast.error('Please log in to follow others');
@@ -278,9 +344,24 @@ export default function CommunityScreen({ navigation }) {
     }
     if (targetId === user.id) return;
     hapticLight();
-    const nowFollowing = await toggleFollow(user.id, targetId, 'user');
+    const nowFollowing = await toggleFollow(user.id, targetId, 'user', user.name);
     toast.success(nowFollowing ? 'Now following' : 'Unfollowed');
   });
+
+  const openProfile = (targetId, targetName) => {
+    if (!targetId) return;
+    hapticLight();
+    navigation.navigate('PublicProfile', { userId: targetId, userName: targetName });
+  };
+
+  const openMyProfile = () => {
+    if (!user) {
+      toast.error('Please log in');
+      return;
+    }
+    hapticLight();
+    navigation.navigate('PublicProfile', { userId: user.id, userName: user.name });
+  };
 
   const handleRepost = (post) => {
     if (!user) {
@@ -329,6 +410,37 @@ export default function CommunityScreen({ navigation }) {
     }).catch(() => {});
   };
 
+  const handleReportPost = () => run(async () => {
+    if (!reportReason.trim()) {
+      toast.error('Please describe the issue');
+      return;
+    }
+    const post = reportModalPost;
+    const report = {
+      id: 'rpt_post_' + Date.now(),
+      type: 'post',
+      postId: post.id,
+      postTitle: post.title,
+      postOwnerId: post.userId,
+      postOwnerName: post.userName,
+      reporterId: user?.id,
+      reporterName: user?.name || 'Guest',
+      category: reportCategory,
+      reason: reportReason.trim(),
+      timestamp: new Date().toISOString(),
+    };
+    const result = await addReport(report);
+    if (result === true || result?.success !== false) {
+      hapticWarning();
+      setReportModalPost(null);
+      setReportReason('');
+      setReportCategory('Other');
+      toast.success('Report submitted. Admin will review it.');
+    } else {
+      toast.error(result?.error || 'Failed to submit report');
+    }
+  });
+
   const handleAddComment = () => run(async () => {
     if (!newComment.trim()) return;
     if (!user) {
@@ -341,6 +453,7 @@ export default function CommunityScreen({ navigation }) {
     const comment = {
       userId: user.id,
       userName: user.name,
+      userProfileImage: user.profileImage || null,
       text: commentText,
       createdAt: new Date().toISOString(),
     };
@@ -357,13 +470,7 @@ export default function CommunityScreen({ navigation }) {
   const followsUnsubRef = useRef(null);
 
   const openComments = (post) => {
-    setSelectedPost(post);
-    setCommentsModalVisible(true);
-    setPostComments([]);
-    if (commentsUnsubRef.current) commentsUnsubRef.current();
-    commentsUnsubRef.current = onPostCommentsSnapshot(post.id, (comments) => {
-      setPostComments(comments);
-    });
+    navigation.navigate('PostDetail', { postId: post.id });
   };
 
   const closeComments = () => {
@@ -390,15 +497,23 @@ export default function CommunityScreen({ navigation }) {
   const TAB_CATEGORIES = POST_CATEGORIES;
 
   const renderPost = ({ item }) => {
-    const isLiked = user && item.likes && item.likes.includes(user.id);
-    const likeCount = item.likes ? item.likes.length : 0;
+    const reactions = item.reactions || {};
+    const myReaction = user ? reactions[user.id] : null;
+    const reactionCounts = {};
+    Object.values(reactions).forEach((r) => { reactionCounts[r] = (reactionCounts[r] || 0) + 1; });
+    const totalReactions = Object.keys(reactions).length;
     const commentCount = item.commentCount || 0;
     const isAdmin = user && user.role === 'admin';
     const isOwner = user && item.userId === user.id;
     const isFollowing = user && followingIds.has(item.userId);
-    const categoryColor = CATEGORY_COLORS[item.category] || '#6B7280';
+    const isSaved = user && savedPostIds.has(item.id);
+    const categoryColor = CATEGORY_COLORS[item.category] || colors.textSecondary;
+    const topReactions = Object.entries(reactionCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
     return (
+      <SwipeablePostCard
+        onSwipeRight={() => handleReaction(item.id, myReaction ? null : '👍')}
+      >
       <View style={[styles.postCard, item.category === 'News' && styles.newsPostCard]}>
         {item.reposted && (
           <View style={styles.repostBanner}>
@@ -411,17 +526,31 @@ export default function CommunityScreen({ navigation }) {
 
         <View style={styles.postHeader}>
           <View style={styles.postHeaderLeft}>
-            <View
+            <TouchableOpacity
               style={[
                 styles.avatar,
                 { backgroundColor: getAvatarColor(item.userName) },
               ]}
+              activeOpacity={0.7}
+              onPress={() => openProfile(item.userId, item.userName)}
+              accessibilityLabel={`View ${item.userName}'s profile`}
+              accessibilityRole="button"
             >
-              <Text style={styles.avatarText}>
-                {getInitials(item.userName)}
-              </Text>
-            </View>
-            <View style={styles.postUserInfo}>
+              {item.userProfileImage ? (
+                <Image source={{ uri: item.userProfileImage }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {getInitials(item.userName)}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.postUserInfo}
+              activeOpacity={0.7}
+              onPress={() => openProfile(item.userId, item.userName)}
+              accessibilityLabel={`View ${item.userName}'s profile`}
+              accessibilityRole="button"
+            >
               <View style={styles.postUserNameRow}>
                 <Text style={styles.postUserName}>{item.userName}</Text>
                 {item.userRole === 'admin' && (
@@ -441,7 +570,7 @@ export default function CommunityScreen({ navigation }) {
                 <Text style={styles.postHeadline} numberOfLines={1}>{item.userHeadline}</Text>
               ) : null}
               <Text style={styles.postTime}>{getTimeAgo(item.createdAt)}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
           {user && item.userId !== user.id && (
             <TouchableOpacity
@@ -464,17 +593,15 @@ export default function CommunityScreen({ navigation }) {
               </Text>
             </TouchableOpacity>
           )}
-          {(isAdmin || isOwner) && (
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={() => handleDeletePost(item)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel="Delete post"
-              accessibilityRole="button"
-            >
-              <Ionicons name="trash-outline" size={18} color="#F44336" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.moreBtn}
+            onPress={() => setPostOptionsMenu(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="More options"
+            accessibilityRole="button"
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
         </View>
 
         {item.category && (
@@ -485,19 +612,41 @@ export default function CommunityScreen({ navigation }) {
           </View>
         )}
 
-        <Text style={styles.postTitle}>{item.title}</Text>
-        <Text style={styles.postDescription}>{item.description}</Text>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('PostDetail', { postId: item.id })}>
+          {item.title ? <Text style={styles.postTitle}>{item.title}</Text> : null}
+          <Text style={styles.postDescription}>{item.description}</Text>
 
-        {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.postImage} />
-        ) : null}
+          {item.imageUrl && !failedImages.has(item.id) ? (
+            <Image
+              source={{ uri: item.imageUrl }}
+              style={styles.postImage}
+              resizeMode="contain"
+              onError={() => setFailedImages((prev) => new Set(prev).add(item.id))}
+            />
+          ) : null}
+        </TouchableOpacity>
 
-        {(likeCount > 0 || commentCount > 0) && (
+        {(totalReactions > 0 || commentCount > 0) && (
           <View style={styles.postStatsRow}>
-            {likeCount > 0 ? (
+            {totalReactions > 0 ? (
               <View style={styles.postStatsLeft}>
-                <Ionicons name="heart" size={13} color="#F44336" />
-                <Text style={styles.postStatsText}>{likeCount} reactions</Text>
+                <View style={styles.reactionIcons}>
+                  {topReactions.map(([emoji]) => (
+                    <Text key={emoji} style={styles.reactionIconSmall}>{emoji}</Text>
+                  ))}
+                </View>
+                <View style={styles.reactionBreakdown}>
+                  {topReactions.map(([emoji, count]) => (
+                    <Text key={emoji} style={styles.reactionCountText}>
+                      {emoji} {count}
+                    </Text>
+                  ))}
+                  {totalReactions > topReactions.reduce((sum, [, c]) => sum + c, 0) && (
+                    <Text style={styles.reactionCountText}>
+                      +{totalReactions - topReactions.reduce((sum, [, c]) => sum + c, 0)}
+                    </Text>
+                  )}
+                </View>
               </View>
             ) : null}
             <Text style={styles.postStatsText}>
@@ -509,24 +658,14 @@ export default function CommunityScreen({ navigation }) {
         <View style={styles.postActions}>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => handleLike(item.id)}
+            onPress={() => handleReaction(item.id, '👍')}
+            onLongPress={() => { hapticMedium(); setReactionPickerPost(item.id); }}
+            delayLongPress={300}
             activeOpacity={0.7}
-            accessibilityLabel={isLiked ? "Unlike post" : "Like post"}
-            accessibilityRole="button"
-            accessibilityState={{ selected: !!isLiked }}
           >
-            <Ionicons
-              name={isLiked ? 'heart' : 'heart-outline'}
-              size={20}
-              color={isLiked ? '#F44336' : colors.textMuted}
-            />
-            <Text
-              style={[
-                styles.actionText,
-                { color: isLiked ? '#F44336' : colors.textMuted },
-              ]}
-            >
-              Like
+            <Text style={{ fontSize: 18 }}>{myReaction || '👍'}</Text>
+            <Text style={[styles.actionText, { color: myReaction ? colors.primary : colors.textMuted }]}>
+              {myReaction ? REACTION_LABELS[REACTIONS.indexOf(myReaction)] || 'Like' : 'Like'}
             </Text>
           </TouchableOpacity>
 
@@ -534,8 +673,6 @@ export default function CommunityScreen({ navigation }) {
             style={styles.actionBtn}
             onPress={() => openComments(item)}
             activeOpacity={0.7}
-            accessibilityLabel="Comment on post"
-            accessibilityRole="button"
           >
             <Ionicons name="chatbubble-outline" size={19} color={colors.textMuted} />
             <Text style={styles.actionText}>Comment</Text>
@@ -543,50 +680,52 @@ export default function CommunityScreen({ navigation }) {
 
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => handleRepost(item)}
+            onPress={() => handleSavePost(item.id)}
             activeOpacity={0.7}
-            accessibilityLabel="Repost"
-            accessibilityRole="button"
           >
-            <Ionicons name="repeat" size={20} color={colors.textMuted} />
-            <Text style={styles.actionText}>Repost</Text>
+            <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={20} color={isSaved ? colors.primary : colors.textMuted} />
+            <Text style={[styles.actionText, { color: isSaved ? colors.primary : colors.textMuted }]}>
+              {isSaved ? 'Saved' : 'Save'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => handleNativeShare(item)}
+            onPress={() => handleRepost(item)}
             activeOpacity={0.7}
-            accessibilityLabel="Share post"
-            accessibilityRole="button"
           >
-            <Ionicons name="send" size={19} color={colors.textMuted} />
-            <Text style={styles.actionText}>Send</Text>
+            <Ionicons name="repeat" size={20} color={colors.textMuted} />
+            <Text style={styles.actionText}>Repost</Text>
           </TouchableOpacity>
         </View>
+
+        {reactionPickerPost === item.id && (
+          <View style={[styles.reactionPicker, { backgroundColor: colors.card }]}>
+            {REACTIONS.map((emoji, i) => (
+              <TouchableOpacity
+                key={emoji}
+                style={styles.reactionOption}
+                onPress={() => handleReaction(item.id, emoji)}
+              >
+                <Text style={styles.reactionEmoji}>{emoji}</Text>
+                <Text style={[styles.reactionLabel, { color: colors.textMuted }]}>{REACTION_LABELS[i]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
+      </SwipeablePostCard>
     );
   };
 
   const renderEmpty = () => (
-    <Animated.View style={{ opacity: emptyOpacity, flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
-      <View style={styles.emptyIconCircle}>
-        <Ionicons name="megaphone-outline" size={48} color={colors.textMuted} />
-      </View>
-      <Text style={styles.emptyTitle}>No posts yet</Text>
-      <Text style={styles.emptySubtitle}>
-        Be the first to post!
-      </Text>
-      <TouchableOpacity
-        style={styles.emptyCreateBtn}
-        activeOpacity={0.8}
-        onPress={() => setCreateModalVisible(true)}
-        accessibilityLabel="Create a post"
-        accessibilityRole="button"
-      >
-        <Ionicons name="add" size={20} color="#fff" />
-        <Text style={styles.emptyCreateBtnText}>Create a Post</Text>
-      </TouchableOpacity>
-    </Animated.View>
+    <EmptyState
+      icon="megaphone-outline"
+      title="No posts yet"
+      subtitle="Be the first to post!"
+      buttonText="Create a Post"
+      onPress={() => setCreateModalVisible(true)}
+    />
   );
 
   if (loading) {
@@ -627,7 +766,7 @@ export default function CommunityScreen({ navigation }) {
       >
         {TAB_CATEGORIES.map((cat) => {
           const isActive = filterCategory === cat;
-          const color = CATEGORY_COLORS[cat] || '#6B7280';
+          const color = CATEGORY_COLORS[cat] || colors.textSecondary;
           return (
             <TouchableOpacity
               key={cat}
@@ -651,14 +790,22 @@ export default function CommunityScreen({ navigation }) {
         ]}
         ListHeaderComponent={user ? (
           <View style={styles.composerCard}>
-            <View
+            <TouchableOpacity
               style={[
                 styles.composerAvatar,
                 { backgroundColor: getAvatarColor(user.name) },
               ]}
+              activeOpacity={0.7}
+              onPress={openMyProfile}
+              accessibilityLabel="View my profile"
+              accessibilityRole="button"
             >
-              <Text style={styles.composerAvatarText}>{getInitials(user.name)}</Text>
-            </View>
+              {user.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+              ) : (
+                <Text style={styles.composerAvatarText}>{getInitials(user.name)}</Text>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.composerInput}
               activeOpacity={0.6}
@@ -677,7 +824,7 @@ export default function CommunityScreen({ navigation }) {
               accessibilityLabel="Post a photo"
               accessibilityRole="button"
             >
-              <Ionicons name="image-outline" size={22} color={colors.primary} />
+              <Ionicons name="image" size={22} color={colors.primary} />
               <Text style={styles.composerPhotoText}>Photo</Text>
             </TouchableOpacity>
           </View>
@@ -698,7 +845,7 @@ export default function CommunityScreen({ navigation }) {
       >
         <SafeAreaView style={styles.modalContainer}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior="padding"
             style={styles.modalKeyboardView}
           >
             <View style={styles.modalHeader}>
@@ -753,7 +900,7 @@ export default function CommunityScreen({ navigation }) {
                   <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
                   <TouchableOpacity
                     style={styles.removeImageBtn}
-                    onPress={() => setSelectedImage(null)}
+                    onPress={() => { setSelectedImage(null); }}
                     accessibilityLabel="Remove image"
                     accessibilityRole="button"
                   >
@@ -768,7 +915,7 @@ export default function CommunityScreen({ navigation }) {
                   accessibilityLabel="Add photo"
                   accessibilityRole="button"
                 >
-                  <Ionicons name="image-outline" size={22} color={colors.primary} />
+                  <Ionicons name="image" size={22} color={colors.primary} />
                   <Text style={[styles.addImageText, { color: colors.primary }]}>Add Photo</Text>
                 </TouchableOpacity>
               )}
@@ -786,7 +933,7 @@ export default function CommunityScreen({ navigation }) {
                     styles.categoryDot,
                     {
                       backgroundColor:
-                        CATEGORY_COLORS[newCategory] || '#6B7280',
+                        CATEGORY_COLORS[newCategory] || colors.textSecondary,
                     },
                   ]}
                 />
@@ -842,7 +989,7 @@ export default function CommunityScreen({ navigation }) {
                   {cat}
                 </Text>
                 {newCategory === cat && (
-                  <Ionicons name="checkmark" size={20} color="#1a237e" />
+                  <Ionicons name="check" size={20} color={colors.primary} />
                 )}
               </TouchableOpacity>
             ))}
@@ -859,7 +1006,7 @@ export default function CommunityScreen({ navigation }) {
       >
         <SafeAreaView style={styles.modalContainer}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior="padding"
             style={styles.modalKeyboardView}
           >
             <View style={styles.modalHeader}>
@@ -873,37 +1020,47 @@ export default function CommunityScreen({ navigation }) {
               <View style={{ width: 50 }} />
             </View>
 
-            {selectedPost && (
-              <View style={styles.commentsPostPreview}>
-                <View style={styles.commentsPostHeader}>
-                  <View
-                    style={[
-                      styles.avatarSmall,
-                      {
-                        backgroundColor: getAvatarColor(
-                          selectedPost.userName
-                        ),
-                      },
-                    ]}
+              {selectedPost && (
+                <View style={styles.commentsPostPreview}>
+                  <TouchableOpacity
+                    style={styles.commentsPostHeader}
+                    activeOpacity={0.7}
+                    onPress={() => openProfile(selectedPost.userId, selectedPost.userName)}
+                    accessibilityLabel={`View ${selectedPost.userName}'s profile`}
+                    accessibilityRole="button"
                   >
-                    <Text style={styles.avatarTextSmall}>
-                      {getInitials(selectedPost.userName)}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={styles.commentsPostUser}>
-                      {selectedPost.userName}
-                    </Text>
-                    <Text style={styles.commentsPostTime}>
-                      {getTimeAgo(selectedPost.createdAt)}
-                    </Text>
-                  </View>
+                    <View
+                      style={[
+                        styles.avatarSmall,
+                        {
+                          backgroundColor: getAvatarColor(
+                            selectedPost.userName
+                          ),
+                        },
+                      ]}
+                    >
+                      {selectedPost.userProfileImage ? (
+                        <Image source={{ uri: selectedPost.userProfileImage }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                      ) : (
+                        <Text style={styles.avatarTextSmall}>
+                          {getInitials(selectedPost.userName)}
+                        </Text>
+                      )}
+                    </View>
+                    <View>
+                      <Text style={styles.commentsPostUser}>
+                        {selectedPost.userName}
+                      </Text>
+                      <Text style={styles.commentsPostTime}>
+                        {getTimeAgo(selectedPost.createdAt)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  <Text style={styles.commentsPostTitle}>
+                    {selectedPost.title}
+                  </Text>
                 </View>
-                <Text style={styles.commentsPostTitle}>
-                  {selectedPost.title}
-                </Text>
-              </View>
-            )}
+              )}
 
             <FlatList
               data={postComments}
@@ -912,7 +1069,7 @@ export default function CommunityScreen({ navigation }) {
               ListEmptyComponent={
                 <View style={styles.commentsEmpty}>
                   <Ionicons
-                    name="chatbubbles-outline"
+                    name="chatbubbles"
                     size={36}
                     color={colors.textMuted}
                   />
@@ -924,31 +1081,50 @@ export default function CommunityScreen({ navigation }) {
                   </Text>
                 </View>
               }
-              renderItem={({ item }) => (
-                <View style={styles.commentItem}>
-                  <View
-                    style={[
-                      styles.avatarTiny,
-                      {
-                        backgroundColor: getAvatarColor(item.userName),
-                      },
-                    ]}
-                  >
-                    <Text style={styles.avatarTextTiny}>
-                      {getInitials(item.userName)}
-                    </Text>
-                  </View>
-                  <View style={styles.commentContent}>
-                    <View style={styles.commentHeader}>
-                      <Text style={styles.commentUser}>{item.userName}</Text>
-                      <Text style={styles.commentTime}>
-                        {getTimeAgo(item.createdAt)}
-                      </Text>
+              renderItem={({ item: cmt }) => {
+                const commentLiked = user && cmt.likes && cmt.likes.includes(user.id);
+                const commentLikeCount = cmt.likes ? cmt.likes.length : 0;
+                const isCommentOwner = user && cmt.userId === user.id;
+                const isPostOwner = user && selectedPost && selectedPost.userId === user.id;
+                return (
+                  <View style={styles.commentItem}>
+                    <TouchableOpacity
+                      style={[styles.avatarTiny, { backgroundColor: getAvatarColor(cmt.userName) }]}
+                      activeOpacity={0.7}
+                      onPress={() => openProfile(cmt.userId, cmt.userName)}
+                    >
+                      {cmt.userProfileImage ? (
+                        <Image source={{ uri: cmt.userProfileImage }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                      ) : (
+                        <Text style={styles.avatarTextTiny}>{getInitials(cmt.userName)}</Text>
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.commentContent}>
+                      <View style={styles.commentHeader}>
+                        <TouchableOpacity activeOpacity={0.7} onPress={() => openProfile(cmt.userId, cmt.userName)}>
+                          <Text style={styles.commentUser}>{cmt.userName}</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.commentTime}>{getTimeAgo(cmt.createdAt)}</Text>
+                      </View>
+                      <Text style={styles.commentText}>{cmt.text}</Text>
+                      <View style={styles.commentActions}>
+                        <TouchableOpacity onPress={() => handleCommentLike(selectedPost.id, cmt.id)} style={styles.commentActionBtn}>
+                          <Ionicons name={commentLiked ? 'heart' : 'heart-outline'} size={14} color={commentLiked ? colors.danger : colors.textMuted} />
+                          <Text style={[styles.commentActionText, { color: commentLiked ? colors.danger : colors.textMuted }]}>
+                            {commentLikeCount > 0 ? commentLikeCount : 'Like'}
+                          </Text>
+                        </TouchableOpacity>
+                        {(isCommentOwner || isPostOwner || isAdmin) && (
+                          <TouchableOpacity onPress={() => handleDeleteCommentItem(selectedPost.id, cmt.id)} style={styles.commentActionBtn}>
+                            <Ionicons name="trash-outline" size={14} color={colors.textMuted} />
+                            <Text style={[styles.commentActionText, { color: colors.textMuted }]}>Delete</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
-                    <Text style={styles.commentText}>{item.text}</Text>
                   </View>
-                </View>
-              )}
+                );
+              }}
             />
 
             <View style={styles.commentInputContainer}>
@@ -984,6 +1160,106 @@ export default function CommunityScreen({ navigation }) {
             </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
+      </Modal>
+
+      {/* Post Options Menu */}
+      <Modal visible={!!postOptionsMenu} transparent animationType="fade" onRequestClose={() => setPostOptionsMenu(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPostOptionsMenu(null)}>
+          <View style={styles.optionsModal}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.optionsTitle}>Post Options</Text>
+            {postOptionsMenu && (
+              <>
+                <TouchableOpacity
+                  style={styles.optionItem}
+                  onPress={() => { handleSavePost(postOptionsMenu.id); setPostOptionsMenu(null); }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={savedPostIds.has(postOptionsMenu.id) ? 'bookmark' : 'bookmark-outline'} size={22} color={savedPostIds.has(postOptionsMenu.id) ? colors.primary : colors.text} />
+                  <Text style={[styles.optionText, savedPostIds.has(postOptionsMenu.id) && { color: colors.primary }]}>
+                    {savedPostIds.has(postOptionsMenu.id) ? 'Unsave' : 'Save'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.optionItem}
+                  onPress={() => { handleNativeShare(postOptionsMenu); setPostOptionsMenu(null); }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="share-outline" size={22} color={colors.text} />
+                  <Text style={styles.optionText}>Share</Text>
+                </TouchableOpacity>
+                {postOptionsMenu.userId !== user?.id && (
+                  <TouchableOpacity
+                    style={styles.optionItem}
+                    onPress={() => { setPostOptionsMenu(null); setReportModalPost(postOptionsMenu); }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="flag-outline" size={22} color={colors.warning} />
+                    <Text style={[styles.optionText, { color: colors.warning }]}>Report</Text>
+                  </TouchableOpacity>
+                )}
+                {postOptionsMenu.userId === user?.id && (
+                  <TouchableOpacity
+                    style={styles.optionItem}
+                    onPress={() => { handleDeletePost(postOptionsMenu); setPostOptionsMenu(null); }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="trash-outline" size={22} color={colors.danger} />
+                    <Text style={[styles.optionText, { color: colors.danger }]}>Delete</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.optionItem, { borderBottomWidth: 0 }]}
+                  onPress={() => setPostOptionsMenu(null)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close-circle-outline" size={22} color={colors.textMuted} />
+                  <Text style={[styles.optionText, { color: colors.textMuted }]}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Report Post Modal */}
+      <Modal visible={!!reportModalPost} transparent animationType="slide" onRequestClose={() => setReportModalPost(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setReportModalPost(null)}>
+          <View style={styles.bottomModal}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Report Post</Text>
+            <Text style={[styles.ratingLabel, { color: colors.textSecondary }]}>Reason</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {['Spam', 'Inappropriate', 'Harassment', 'Misinformation', 'Other'].map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.reportChip, reportCategory === cat && styles.reportChipActive]}
+                  onPress={() => setReportCategory(cat)}
+                >
+                  <Text style={[styles.reportChipText, reportCategory === cat && styles.reportChipTextActive]}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={[styles.reportInput, { backgroundColor: colors.borderLight, color: colors.text }]}
+              placeholder="Describe the issue..."
+              placeholderTextColor={colors.textMuted}
+              value={reportReason}
+              onChangeText={setReportReason}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <View style={styles.reviewModalButtons}>
+              <TouchableOpacity style={[styles.reviewCancelBtn, { borderColor: colors.border }]} onPress={() => setReportModalPost(null)}>
+                <Text style={[styles.reviewCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.reviewSubmitBtn, { backgroundColor: colors.warning }]} onPress={handleReportPost}>
+                <Text style={styles.reviewSubmitText}>Submit Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -1044,7 +1320,7 @@ const getStyles = (colors) => createStyleSheet({
 
   newsPostCard: {
     borderLeftWidth: 4,
-    borderLeftColor: '#D32F2F',
+    borderLeftColor: colors.danger,
   },
   postUserNameRow: {
     flexDirection: 'row',
@@ -1054,7 +1330,7 @@ const getStyles = (colors) => createStyleSheet({
   adminBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D32F2F',
+    backgroundColor: colors.danger,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -1069,7 +1345,7 @@ const getStyles = (colors) => createStyleSheet({
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -1182,17 +1458,25 @@ const getStyles = (colors) => createStyleSheet({
     flex: 1,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   avatarText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   postUserInfo: {
     flex: 1,
@@ -1207,8 +1491,53 @@ const getStyles = (colors) => createStyleSheet({
     color: colors.textMuted,
     marginTop: 1,
   },
-  deleteBtn: {
+  moreBtn: {
     padding: 6,
+  },
+  optionsModal: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
+    paddingBottom: 34,
+    maxHeight: '60%',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  optionsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  optionText: {
+    fontSize: 16,
+    color: colors.text,
   },
   categoryTag: {
     alignSelf: 'flex-start',
@@ -1229,15 +1558,16 @@ const getStyles = (colors) => createStyleSheet({
   },
   postDescription: {
     fontSize: 14,
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 21,
     marginBottom: 14,
   },
   postImage: {
     width: '100%',
-    height: 200,
+    height: 300,
     borderRadius: 12,
     marginBottom: 14,
+    backgroundColor: 'rgba(0,0,0,0.05)',
   },
   postActions: {
     flexDirection: 'row',
@@ -1338,7 +1668,7 @@ const getStyles = (colors) => createStyleSheet({
   emptyCreateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 14,
@@ -1380,7 +1710,7 @@ const getStyles = (colors) => createStyleSheet({
     color: colors.text,
   },
   modalPostBtn: {
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 20,
@@ -1530,7 +1860,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   pickerItemTextActive: {
     fontWeight: '600',
-    color: '#1a237e',
+    color: colors.primary,
   },
 
   // Comments
@@ -1633,7 +1963,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   commentText: {
     fontSize: 14,
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   commentInputContainer: {
@@ -1660,12 +1990,131 @@ const getStyles = (colors) => createStyleSheet({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   commentSendBtnDisabled: {
-    backgroundColor: '#C4C4C4',
+    backgroundColor: colors.textMuted,
+  },
+  reactionIcons: {
+    flexDirection: 'row',
+    marginRight: 6,
+  },
+  reactionIconSmall: {
+    fontSize: 14,
+    marginLeft: -4,
+  },
+  reactionBreakdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  reactionCountText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  reactionPicker: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 24,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  reactionOption: {
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  reactionEmoji: {
+    fontSize: 28,
+  },
+  reactionLabel: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  commentActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  commentActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  commentActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  bottomModal: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  ratingLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  reportInput: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    minHeight: 80,
+    marginBottom: 16,
+  },
+  reviewModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  reviewCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  reviewCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  reviewSubmitBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  reviewSubmitText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  reportChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: colors.borderLight,
+  },
+  reportChipActive: {
+    backgroundColor: colors.primary,
+  },
+  reportChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  reportChipTextActive: {
+    color: '#fff',
   },
 });
 

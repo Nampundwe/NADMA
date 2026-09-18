@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   Linking,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
@@ -95,7 +94,7 @@ export default function MapScreen({ navigation }) {
             onPress={() => navigation.navigate('ServiceDetail', { service: item })}
           >
             <View style={styles.cardLeft}>
-              <View style={[styles.cardIcon, { backgroundColor: categories.find((c) => c.name === item.category)?.color || '#1a237e' }]}>
+              <View style={[styles.cardIcon, { backgroundColor: categories.find((c) => c.name === item.category)?.color || colors.primary }]}>
                 <Ionicons name={categories.find((c) => c.name === item.category)?.icon || 'briefcase'} size={20} color="#fff" />
               </View>
             </View>
@@ -103,7 +102,7 @@ export default function MapScreen({ navigation }) {
               <Text style={styles.cardName}>{item.name}</Text>
               <Text style={styles.cardCategory}>{item.category}</Text>
               <View style={styles.cardAddress}>
-                <Ionicons name="location" size={12} color={colors.textMuted} />
+                <Ionicons name="location-on" size={12} color={colors.textMuted} />
                 <Text style={styles.cardAddressText} numberOfLines={1}>{item.address || 'Nampundwe'}</Text>
               </View>
             </View>
@@ -113,7 +112,7 @@ export default function MapScreen({ navigation }) {
                   style={styles.callBtn}
                   onPress={() => Linking.openURL(`tel:${item.phone}`)}
                 >
-                  <Ionicons name="call" size={18} color="#4CAF50" />
+                  <Ionicons name="phone" size={18} color={colors.success} />
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -123,14 +122,14 @@ export default function MapScreen({ navigation }) {
                   Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${addr}`);
                 }}
               >
-                <Ionicons name="navigate" size={18} color="#2196F3" />
+                <Ionicons name="navigation" size={18} color={colors.info} />
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="map-outline" size={48} color="#C4C4C4" />
+            <Ionicons name="map" size={48} color={colors.textMuted} />
             <Text style={styles.emptyText}>No providers found</Text>
             <Text style={styles.emptySubtext}>Try a different category</Text>
           </View>
@@ -161,7 +160,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#C5CAE9',
+    color: colors.textMuted,
     marginLeft: 34,
   },
   categoryFilter: {
@@ -176,7 +175,7 @@ const getStyles = (colors) => createStyleSheet({
     marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: '#1a237e',
+    backgroundColor: colors.primary,
   },
   filterText: {
     fontSize: 13,
@@ -220,7 +219,7 @@ const getStyles = (colors) => createStyleSheet({
   },
   cardCategory: {
     fontSize: 12,
-    color: '#1a237e',
+    color: colors.primary,
     marginBottom: 4,
   },
   cardAddress: {
@@ -240,7 +239,7 @@ const getStyles = (colors) => createStyleSheet({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.successLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -248,7 +247,7 @@ const getStyles = (colors) => createStyleSheet({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: colors.infoLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
